@@ -127,7 +127,6 @@ async function fetchLegacyStockWsdlSnippet() {
       headers: { "Accept": "application/xml,text/xml,*/*" }
     }, 0);
     const raw = typeof text === "string" ? text : JSON.stringify(text);
-
     const locations = [...raw.matchAll(/schemaLocation="([^"]+)"/g)].map(m => m[1]);
     const inspected = [{ url: wsdlUrl, length: raw.length, schemaLocations: locations }];
 
@@ -140,12 +139,10 @@ async function fetchLegacyStockWsdlSnippet() {
         }, 0);
         const x = typeof body === "string" ? body : JSON.stringify(body);
         const markers = [
-          '<xs:element name="ArticleBarcodeSearch"',
-          '<xsd:element name="ArticleBarcodeSearch"',
-          'name="ArticleBarcodeSearch"',
-          'ArticleBarcodePredicate',
-          'ArticleBarcodeSearchResponse',
-          'ArticleBarcodes'
+          'name="ArticleBarcodePredicate"',
+          '<xs:complexType name="ArticleBarcodePredicate"',
+          '<xsd:complexType name="ArticleBarcodePredicate"',
+          'ArticleBarcodePredicate'
         ];
         let pos = -1, marker = "";
         for (const m of markers) {
@@ -156,7 +153,7 @@ async function fetchLegacyStockWsdlSnippet() {
         if (pos >= 0) {
           return JSON.stringify({
             inspected,
-            excerpt: x.slice(Math.max(0, pos - 7000), pos + 18000)
+            excerpt: x.slice(Math.max(0, pos - 5000), pos + 12000)
           });
         }
       } catch (e) {

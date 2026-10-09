@@ -19,7 +19,7 @@ const wsdlReplacement = `    let legacyTest = null;
       const response = await fetch(origin + "/services/Stock.svc?singleWsdl", { headers: { "Accept": "application/xml,text/xml,*/*" } });
       const text = await response.text();
       const picks = {};
-      for (const term of ["ArticleSearch", "ArticleLoad"]) {
+      for (const term of ["ArticleSearch", "ArticleLoad", "complexType name=\\\"ArticlePredicate\\\"", "GenericOutputOfArticle", "ArticleBarcodes"]) {
         const i = text.indexOf(term);
         picks[term] = i >= 0 ? text.slice(Math.max(0, i - 1200), Math.min(text.length, i + 3200)) : null;
       }

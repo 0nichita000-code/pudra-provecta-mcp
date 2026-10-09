@@ -332,7 +332,7 @@ function createMcpServer() {
       const docs = await fetchJson(`${BASE}/v2/api-docs`, { method: "GET", headers: { "Accept": "application/json" } }, 0);
       const keys = Object.keys(docs?.paths || {}).filter(k => {
         const x = k.toLowerCase();
-        return x.includes("barcode") || x.includes("/stock/article");
+        return x.includes("barcode") || x.includes("code") || x.includes("identifier") || x.includes("scan") || x.includes("article");
       });
       const defs = docs?.definitions || {};
       const defKeys = Object.keys(defs).filter(k => k.toLowerCase().includes("article") || k.toLowerCase().includes("barcode"));

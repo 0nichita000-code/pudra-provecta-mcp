@@ -284,7 +284,15 @@ function createMcpServer() {
   }, async () => {
     const a = await login(true);
     const [branches, depots] = await Promise.all([getBranches(true), getDepots(true)]);
-    return jsonReply({ ok: true, client: a.client, branches: branches.map(simpleBranch), depots: depots.map(simpleDepot) });
+    let schema = null;
+    try {
+      const docs = await fetchJson(`${BASE}/v2/api-docs`, { method: "GET", headers: { "Accept": "application/json" } }, 0);
+      schema = {
+        documentSelect: docs?.paths?.["/v1/stock/document/select"] || null,
+        lotSelect: docs?.paths?.["/v1/stock/lot/select"] || null
+      };
+    } catch {}
+    return jsonReply({ ok: true, client: a.client, branches: branches.map(simpleBranch), depots: depots.map(simpleDepot), schema });
   });
 
   mcp.registerTool("list_branches", {

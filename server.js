@@ -182,8 +182,22 @@ async function legacyCommonCall(method, body, extraHeaders = {}) {
 
 function unwrapLegacyToken(data, field) {
   if (!data || typeof data !== "object") return null;
-  const token = data[field] ?? data[field?.toLowerCase?.()] ?? data;
-  return token && typeof token === "object" ? token : null;
+  const lower = field?.toLowerCase?.();
+  const d = data.d && typeof data.d === "object" ? data.d : null;
+  const candidates = [
+    data[field],
+    lower ? data[lower] : null,
+    d?.[field],
+    lower ? d?.[lower] : null,
+    d,
+    data.Result,
+    data.result,
+    data
+  ];
+  for (const token of candidates) {
+    if (token && typeof token === "object" && (token.Code ?? token.code)) return token;
+  }
+  return null;
 }
 
 async function getLegacyToken(force = false) {

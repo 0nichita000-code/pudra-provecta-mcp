@@ -116,7 +116,7 @@ async function login(force = false) {
   throw lastError;
 }
 
-let legacyAuthCache = { code: "", expiresAt: 0 };
+let legacyAuthCache = { code: "", cookie: "", expiresAt: 0 };
 
 async function fetchLegacyStockWsdlSnippet() {
   try {
@@ -200,6 +200,34 @@ function unwrapLegacyToken(data, field) {
   return null;
 }
 
+
+async function getLegacySessionCookie(force = false) {
+  if (!force && legacyAuthCache.cookie && legacyAuthCache.expiresAt > Date.now() + 60000) return legacyAuthCache.cookie;
+  const origin = new URL(BASE).origin;
+  for (const userCode of [...new Set([USERNAME, String(USERNAME || "").toLowerCase()])]) {
+    try {
+      const r = await fetch(origin + "/services/Framework/Common.svc/Web/Login", {
+        method: "POST",
+        headers: {
+          "Accept": "application/json, */*",
+          "Content-Type": "application/json; charset=utf-8",
+          "X-Requested-With": "XMLHttpRequest"
+        },
+        body: JSON.stringify({ userCode, userPassword: PASSWORD })
+      });
+      const setCookie = r.headers.get("set-cookie") || "";
+      await r.text();
+      if (setCookie) {
+        const cookie = setCookie.split(",").map(x => x.split(";")[0].trim()).filter(Boolean).join("; ");
+        legacyAuthCache.cookie = cookie;
+        legacyAuthCache.expiresAt = Date.now() + 30 * 60 * 1000;
+        return cookie;
+      }
+    } catch {}
+  }
+  return "";
+}
+
 async function getLegacyToken(force = false) {
   if (!force && legacyAuthCache.code && legacyAuthCache.expiresAt > Date.now() + 60000) return legacyAuthCache.code;
 
@@ -273,8 +301,10 @@ async function legacyPost(method, body) {
   };
 
   const legacyCode = await getLegacyToken(false);
+  const legacyCookie = await getLegacySessionCookie(false);
   const tokens = [...new Set([legacyCode, modern.token].filter(Boolean))];
   const variants = [];
+  if (legacyCookie) variants.push({ ...baseHeaders, "Cookie": legacyCookie });
 
   for (const token of tokens) {
     variants.push(
@@ -286,6 +316,12 @@ async function legacyPost(method, body) {
       { ...baseHeaders, "Authorization": token },
       { ...baseHeaders, "Authorization": `Bearer ${token}` }
     );
+    if (legacyCookie) {
+      variants.push(
+        { ...baseHeaders, "Cookie": legacyCookie, [mxHeader]: token },
+        { ...baseHeaders, "Cookie": legacyCookie, "TokenCode": token }
+      );
+    }
   }
 
   let last = null;

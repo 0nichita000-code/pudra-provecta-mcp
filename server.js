@@ -357,12 +357,24 @@ function createMcpServer() {
     annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: true }
   }, async ({ query, limit = 30 }) => {
     const q = query.toLowerCase();
-    const items = (await getArticles(false))
-      .filter(a => [a.Name, a.name, a.Barcode, a.barcode, a.Code, a.code].some(v => String(v || "").toLowerCase().includes(q)))
-      .slice(0, limit)
-      .map(simpleArticle);
+    const articles = await getArticles(false);
+    let matchedRaw = articles.filter(a => [a.Name, a.name, a.Barcode, a.barcode, a.Code, a.code].some(v => String(v || "").toLowerCase().includes(q)));
 
-    if (/^\d{8,14}$/.test(query) && items.length === 1 && String(items[0].barcode || "") === query) {
+    // Provecta articles may contain additional/alternate barcodes in nested fields.
+    // For a scanned numeric barcode not found in the primary Barcode field, search
+    // the complete raw article payload so alternate barcodes resolve too.
+    let matchedByAlternateBarcode = false;
+    if (/^\d{8,14}$/.test(query) && matchedRaw.length === 0) {
+      matchedRaw = articles.filter(a => JSON.stringify(a).includes(query));
+      matchedByAlternateBarcode = matchedRaw.length > 0;
+    }
+
+    const items = matchedRaw.slice(0, limit).map(a => ({
+      ...simpleArticle(a),
+      matchedByAlternateBarcode
+    }));
+
+    if (/^\d{8,14}$/.test(query) && items.length === 1) {
       if (!stockCache.ready) {
         refreshStockCache(false).catch(() => {});
         const started = Date.now();

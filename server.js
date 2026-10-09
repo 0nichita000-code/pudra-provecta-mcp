@@ -1,5 +1,5 @@
-// oauth-update-test
 import { createServer } from "node:http";
+import crypto from "node:crypto";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { z } from "zod";
@@ -12,6 +12,11 @@ const PASSWORD = process.env.PROVECTA_PASSWORD || "";
 const FIXED_CLIENT = process.env.PROVECTA_CLIENT_ID || "";
 const MCP_ACCESS_TOKEN = process.env.MCP_ACCESS_TOKEN || "";
 const SALE_OPERATION = process.env.PROVECTA_SALE_OPERATION || "OutcomeRegular";
+const PUBLIC_BASE_URL = (process.env.PUBLIC_BASE_URL || "").replace(/\/$/, "");
+const OAUTH_SIGNING_SECRET = process.env.OAUTH_SIGNING_SECRET || MCP_ACCESS_TOKEN;
+const OAUTH_CONNECT_CODE = process.env.OAUTH_CONNECT_CODE || (MCP_ACCESS_TOKEN ? crypto.createHash("sha256").update(`pudra-connect:${MCP_ACCESS_TOKEN}`).digest("hex").slice(0, 12).toUpperCase() : "");
+const OAUTH_SCOPE = "pudra.read";
+const usedAuthorizationCodes = new Set();
 
 let authCache = { token: "", client: "", expiresAt: 0 };
 let articleCache = { at: 0, items: [], byId: new Map(), byBarcode: new Map() };
@@ -356,19 +361,231 @@ function createMcpServer() {
   return mcp;
 }
 
+function publicBase(req) {
+  if (PUBLIC_BASE_URL) return PUBLIC_BASE_URL;
+  const proto = String(req.headers["x-forwarded-proto"] || "https").split(",")[0].trim();
+  const host = String(req.headers["x-forwarded-host"] || req.headers.host || "localhost").split(",")[0].trim();
+  return `${proto}://${host}`;
+}
+
+function b64url(input) {
+  return Buffer.from(input).toString("base64url");
+}
+function fromB64url(input) {
+  return Buffer.from(input, "base64url").toString("utf8");
+}
+function hmac(value) {
+  if (!OAUTH_SIGNING_SECRET) throw new Error("OAUTH_SIGNING_SECRET is not configured");
+  return crypto.createHmac("sha256", OAUTH_SIGNING_SECRET).update(value).digest("base64url");
+}
+function signObject(prefix, obj) {
+  const payload = b64url(JSON.stringify(obj));
+  const body = `${prefix}.${payload}`;
+  return `${body}.${hmac(body)}`;
+}
+function verifyObject(token, prefix) {
+  if (!token || typeof token !== "string") return null;
+  const parts = token.split(".");
+  if (parts.length !== 3 || parts[0] !== prefix) return null;
+  const body = `${parts[0]}.${parts[1]}`;
+  const expected = Buffer.from(hmac(body));
+  const actual = Buffer.from(parts[2]);
+  if (expected.length !== actual.length || !crypto.timingSafeEqual(expected, actual)) return null;
+  try {
+    const obj = JSON.parse(fromB64url(parts[1]));
+    if (obj.exp && Number(obj.exp) < Math.floor(Date.now() / 1000)) return null;
+    return obj;
+  } catch { return null; }
+}
+function sameSecret(a, b) {
+  const aa = Buffer.from(String(a || ""));
+  const bb = Buffer.from(String(b || ""));
+  return aa.length === bb.length && aa.length > 0 && crypto.timingSafeEqual(aa, bb);
+}
+async function readBody(req, limit = 64 * 1024) {
+  const chunks = [];
+  let size = 0;
+  for await (const chunk of req) {
+    size += chunk.length;
+    if (size > limit) throw new Error("Request body too large");
+    chunks.push(chunk);
+  }
+  return Buffer.concat(chunks).toString("utf8");
+}
+function sendJson(res, status, data, headers = {}) {
+  res.writeHead(status, { "content-type": "application/json", "cache-control": "no-store", ...headers });
+  res.end(JSON.stringify(data));
+}
+function oauthMetadata(req) {
+  const base = publicBase(req);
+  return {
+    issuer: base,
+    authorization_endpoint: `${base}/oauth/authorize`,
+    token_endpoint: `${base}/oauth/token`,
+    registration_endpoint: `${base}/oauth/register`,
+    response_types_supported: ["code"],
+    grant_types_supported: ["authorization_code", "refresh_token"],
+    code_challenge_methods_supported: ["S256"],
+    token_endpoint_auth_methods_supported: ["none"],
+    scopes_supported: [OAUTH_SCOPE],
+    authorization_response_iss_parameter_supported: true
+  };
+}
+function protectedResourceMetadata(req) {
+  const base = publicBase(req);
+  return {
+    resource: `${base}${MCP_PATH}`,
+    authorization_servers: [base],
+    bearer_methods_supported: ["header"],
+    scopes_supported: [OAUTH_SCOPE]
+  };
+}
+function verifyClientId(clientId) {
+  return verifyObject(clientId, "pudra_client");
+}
+function createAccessToken(resource, clientId, scope, lifetimeSec = 7 * 24 * 3600) {
+  const now = Math.floor(Date.now() / 1000);
+  return signObject("pudra_at", { typ: "access", aud: resource, client_id: clientId, scope, iat: now, exp: now + lifetimeSec, jti: crypto.randomUUID() });
+}
+function createRefreshToken(resource, clientId, scope, lifetimeSec = 180 * 24 * 3600) {
+  const now = Math.floor(Date.now() / 1000);
+  return signObject("pudra_rt", { typ: "refresh", aud: resource, client_id: clientId, scope, iat: now, exp: now + lifetimeSec, jti: crypto.randomUUID() });
+}
 function authorized(req) {
-  if (!MCP_ACCESS_TOKEN) return false;
   const h = String(req.headers.authorization || "");
-  return h === `Bearer ${MCP_ACCESS_TOKEN}`;
+  if (!h.startsWith("Bearer ")) return false;
+  const token = h.slice(7).trim();
+  if (MCP_ACCESS_TOKEN && sameSecret(token, MCP_ACCESS_TOKEN)) return true; // legacy admin/testing token
+  const data = verifyObject(token, "pudra_at");
+  if (!data || data.typ !== "access") return false;
+  const expected = `${publicBase(req)}${MCP_PATH}`;
+  return data.aud === expected && String(data.scope || "").split(/\s+/).includes(OAUTH_SCOPE);
+}
+function oauthChallenge(req) {
+  const base = publicBase(req);
+  return `Bearer resource_metadata="${base}/.well-known/oauth-protected-resource", scope="${OAUTH_SCOPE}"`;
 }
 
 const httpServer = createServer(async (req, res) => {
   const url = new URL(req.url || "/", `http://${req.headers.host || "localhost"}`);
+
   if (req.method === "GET" && url.pathname === "/") {
     res.writeHead(200, { "content-type": "application/json" });
-    res.end(JSON.stringify({ ok: true, service: "PUDRA Provecta MCP", mcp: MCP_PATH }));
+    res.end(JSON.stringify({ ok: true, service: "PUDRA Provecta MCP", mcp: MCP_PATH, oauth: true }));
     return;
   }
+
+  if (req.method === "GET" && (url.pathname === "/.well-known/oauth-authorization-server" || url.pathname === "/.well-known/openid-configuration")) {
+    sendJson(res, 200, oauthMetadata(req));
+    return;
+  }
+  if (req.method === "GET" && (url.pathname === "/.well-known/oauth-protected-resource" || url.pathname === "/.well-known/oauth-protected-resource/mcp")) {
+    sendJson(res, 200, protectedResourceMetadata(req));
+    return;
+  }
+
+  if (req.method === "POST" && url.pathname === "/oauth/register") {
+    try {
+      const raw = await readBody(req);
+      const body = raw ? JSON.parse(raw) : {};
+      const redirects = Array.isArray(body.redirect_uris) ? body.redirect_uris.filter(x => typeof x === "string" && x.startsWith("https://")) : [];
+      if (!redirects.length) return sendJson(res, 400, { error: "invalid_client_metadata", error_description: "redirect_uris required" });
+      const now = Math.floor(Date.now() / 1000);
+      const clientId = signObject("pudra_client", { redirect_uris: redirects, iat: now, exp: now + 365 * 24 * 3600 });
+      sendJson(res, 201, {
+        client_id: clientId,
+        client_id_issued_at: now,
+        redirect_uris: redirects,
+        token_endpoint_auth_method: "none",
+        grant_types: ["authorization_code", "refresh_token"],
+        response_types: ["code"],
+        client_name: body.client_name || "ChatGPT"
+      });
+    } catch (e) {
+      sendJson(res, 400, { error: "invalid_client_metadata" });
+    }
+    return;
+  }
+
+  if ((req.method === "GET" || req.method === "POST") && url.pathname === "/oauth/authorize") {
+    let params = url.searchParams;
+    let submittedCode = "";
+    if (req.method === "POST") {
+      const raw = await readBody(req);
+      const form = new URLSearchParams(raw);
+      params = form;
+      submittedCode = form.get("connect_code") || "";
+    }
+    const clientId = params.get("client_id") || "";
+    const redirectUri = params.get("redirect_uri") || "";
+    const responseType = params.get("response_type") || "";
+    const state = params.get("state") || "";
+    const challenge = params.get("code_challenge") || "";
+    const challengeMethod = params.get("code_challenge_method") || "";
+    const scope = params.get("scope") || OAUTH_SCOPE;
+    const resource = params.get("resource") || `${publicBase(req)}${MCP_PATH}`;
+    const client = verifyClientId(clientId);
+    if (!client || !Array.isArray(client.redirect_uris) || !client.redirect_uris.includes(redirectUri) || responseType !== "code" || challengeMethod !== "S256" || !challenge) {
+      res.writeHead(400, { "content-type": "text/plain; charset=utf-8" });
+      res.end("Invalid OAuth request");
+      return;
+    }
+    if (req.method === "POST") {
+      if (!OAUTH_CONNECT_CODE || !sameSecret(submittedCode, OAUTH_CONNECT_CODE)) {
+        res.writeHead(401, { "content-type": "text/html; charset=utf-8" });
+        res.end("<h2>Incorrect connection code</h2><p>Return to ChatGPT and try connecting again.</p>");
+        return;
+      }
+      const now = Math.floor(Date.now() / 1000);
+      const nonce = crypto.randomUUID();
+      const code = signObject("pudra_code", { client_id: clientId, redirect_uri: redirectUri, code_challenge: challenge, scope, resource, nonce, iat: now, exp: now + 180 });
+      const dest = new URL(redirectUri);
+      dest.searchParams.set("code", code);
+      if (state) dest.searchParams.set("state", state);
+      dest.searchParams.set("iss", publicBase(req));
+      res.writeHead(302, { location: dest.toString(), "cache-control": "no-store" });
+      res.end();
+      return;
+    }
+    const hidden = [...params.entries()].map(([k,v]) => `<input type="hidden" name="${String(k).replace(/"/g,"&quot;")}" value="${String(v).replace(/"/g,"&quot;")}">`).join("");
+    res.writeHead(200, { "content-type": "text/html; charset=utf-8", "cache-control": "no-store", "content-security-policy": "default-src 'none'; style-src 'unsafe-inline'; form-action 'self'; base-uri 'none'" });
+    res.end(`<!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"><title>Connect PUDRA</title><style>body{font-family:system-ui;max-width:520px;margin:60px auto;padding:20px}input,button{font-size:18px;padding:12px;width:100%;box-sizing:border-box;margin-top:12px}button{cursor:pointer}p{color:#555}</style></head><body><h1>Connect PUDRA</h1><p>Enter the one-time connection code for the private PUDRA Provecta connector.</p><form method="post" action="/oauth/authorize">${hidden}<input name="connect_code" type="password" autocomplete="one-time-code" required placeholder="Connection code"><button type="submit">Connect</button></form></body></html>`);
+    return;
+  }
+
+  if (req.method === "POST" && url.pathname === "/oauth/token") {
+    try {
+      const raw = await readBody(req);
+      const form = new URLSearchParams(raw);
+      const grantType = form.get("grant_type") || "";
+      const clientId = form.get("client_id") || "";
+      const client = verifyClientId(clientId);
+      if (!client) return sendJson(res, 400, { error: "invalid_client" });
+      if (grantType === "authorization_code") {
+        const code = verifyObject(form.get("code") || "", "pudra_code");
+        const verifier = form.get("code_verifier") || "";
+        const redirectUri = form.get("redirect_uri") || "";
+        if (!code || code.client_id !== clientId || code.redirect_uri !== redirectUri || usedAuthorizationCodes.has(code.nonce)) return sendJson(res, 400, { error: "invalid_grant" });
+        const computed = crypto.createHash("sha256").update(verifier).digest("base64url");
+        if (!sameSecret(computed, code.code_challenge)) return sendJson(res, 400, { error: "invalid_grant" });
+        usedAuthorizationCodes.add(code.nonce);
+        const access = createAccessToken(code.resource, clientId, code.scope || OAUTH_SCOPE);
+        const refresh = createRefreshToken(code.resource, clientId, code.scope || OAUTH_SCOPE);
+        return sendJson(res, 200, { access_token: access, token_type: "Bearer", expires_in: 7 * 24 * 3600, refresh_token: refresh, scope: code.scope || OAUTH_SCOPE });
+      }
+      if (grantType === "refresh_token") {
+        const rt = verifyObject(form.get("refresh_token") || "", "pudra_rt");
+        if (!rt || rt.typ !== "refresh" || rt.client_id !== clientId) return sendJson(res, 400, { error: "invalid_grant" });
+        const access = createAccessToken(rt.aud, clientId, rt.scope || OAUTH_SCOPE);
+        const refresh = createRefreshToken(rt.aud, clientId, rt.scope || OAUTH_SCOPE);
+        return sendJson(res, 200, { access_token: access, token_type: "Bearer", expires_in: 7 * 24 * 3600, refresh_token: refresh, scope: rt.scope || OAUTH_SCOPE });
+      }
+      return sendJson(res, 400, { error: "unsupported_grant_type" });
+    } catch (e) {
+      return sendJson(res, 400, { error: "invalid_request" });
+    }
+  }
+
   if (req.method === "OPTIONS" && url.pathname === MCP_PATH) {
     res.writeHead(204, {
       "Access-Control-Allow-Origin": "*",
@@ -381,7 +598,7 @@ const httpServer = createServer(async (req, res) => {
   }
   if (url.pathname === MCP_PATH && ["POST", "GET", "DELETE"].includes(req.method || "")) {
     if (!authorized(req)) {
-      res.writeHead(401, { "content-type": "application/json", "WWW-Authenticate": "Bearer" });
+      res.writeHead(401, { "content-type": "application/json", "WWW-Authenticate": oauthChallenge(req) });
       res.end(JSON.stringify({ error: "Unauthorized" }));
       return;
     }

@@ -186,6 +186,37 @@ function findArticleWithBarcode(payload, barcode, depth = 0) {
   return null;
 }
 
+
+async function modernSearchAdditionalBarcode(barcode) {
+  const diagnostics = [];
+  const candidates = [
+    { barcode },
+    { barcodes: [barcode] },
+    { articleBarcode: barcode },
+    { articleBarcodes: [barcode] },
+    { query: barcode },
+    { search: barcode }
+  ];
+
+  for (const params of candidates) {
+    try {
+      const data = asArray(await apiGet("/v1/stock/article/select", params));
+      diagnostics.push({ params: Object.keys(params), count: data.length });
+      if (data.length > 0 && data.length < 100) {
+        const exact = data.find(a =>
+          String(a.Barcode ?? a.barcode ?? "").trim() === barcode ||
+          articleBarcodes(a).includes(barcode)
+        );
+        if (exact) return { article: exact, diagnostics };
+        if (data.length === 1) return { article: data[0], diagnostics };
+      }
+    } catch (e) {
+      diagnostics.push({ params: Object.keys(params), status: e.status || null, error: String(e.message || e).slice(0, 180) });
+    }
+  }
+  return { article: null, diagnostics };
+}
+
 async function legacySearchAdditionalBarcode(barcode) {
   // Provecta's web UI uses the legacy Stock.svc methods and returns
   // ArticleBarcodes there, while /v1/stock/article/select omits them.
@@ -493,13 +524,20 @@ function createMcpServer() {
       matchedByAlternateBarcode = matchedRaw.length > 0;
 
       if (matchedRaw.length === 0) {
-        const legacy = await legacySearchAdditionalBarcode(query);
-        alternateBarcodeDiagnostics = legacy.diagnostics;
-        if (legacy.article) {
-          const legacyId = idOf(legacy.article);
-          const canonical = legacyId ? articleCache.byId.get(legacyId) : null;
-          matchedRaw = [canonical ? { ...canonical, ArticleBarcodes: articleBarcodes(legacy.article) } : legacy.article];
+        const modern = await modernSearchAdditionalBarcode(query);
+        alternateBarcodeDiagnostics = [{ source: "modern", diagnostics: modern.diagnostics }];
+        if (modern.article) {
+          matchedRaw = [modern.article];
           matchedByAlternateBarcode = true;
+        } else {
+          const legacy = await legacySearchAdditionalBarcode(query);
+          alternateBarcodeDiagnostics.push({ source: "legacy", diagnostics: legacy.diagnostics });
+          if (legacy.article) {
+            const legacyId = idOf(legacy.article);
+            const canonical = legacyId ? articleCache.byId.get(legacyId) : null;
+            matchedRaw = [canonical ? { ...canonical, ArticleBarcodes: articleBarcodes(legacy.article) } : legacy.article];
+            matchedByAlternateBarcode = true;
+          }
         }
       }
     }

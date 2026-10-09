@@ -131,6 +131,78 @@ async function legacyArticleLoad(articleId) {
   }, 0);
 }
 
+function articleBarcodes(a) {
+  const xs = a?.ArticleBarcodes ?? a?.articleBarcodes ?? [];
+  return Array.isArray(xs) ? xs.map(x => String(x ?? "").trim()).filter(Boolean) : [];
+}
+
+function findArticleWithBarcode(payload, barcode, depth = 0) {
+  if (payload == null || depth > 8) return null;
+  if (Array.isArray(payload)) {
+    for (const item of payload) {
+      const found = findArticleWithBarcode(item, barcode, depth + 1);
+      if (found) return found;
+    }
+    return null;
+  }
+  if (typeof payload !== "object") return null;
+
+  const primary = String(payload.Barcode ?? payload.barcode ?? "").trim();
+  if (primary === barcode || articleBarcodes(payload).includes(barcode)) return payload;
+
+  for (const value of Object.values(payload)) {
+    const found = findArticleWithBarcode(value, barcode, depth + 1);
+    if (found) return found;
+  }
+  return null;
+}
+
+async function legacySearchAdditionalBarcode(barcode) {
+  const a = await login(false);
+  const origin = new URL(BASE).origin;
+  const headers = {
+    "Accept": "application/json, */*",
+    "Content-Type": "application/json; charset=utf-8",
+    "Authorization": `Bearer ${a.token}`,
+    "Client": a.client
+  };
+
+  // Provecta's web UI uses the legacy Stock.svc methods and returns
+  // ArticleBarcodes there, while /v1/stock/article/select omits them.
+  // Try the common WCF payload shapes used by the UI.
+  const attempts = [
+    ["ArticleSearch", { article: { Barcode: barcode } }],
+    ["ArticleSearch", { barcode }],
+    ["ArticleSearch", { Barcode: barcode }],
+    ["ArticleSearch", { text: barcode }],
+    ["ArticleSearch", { search: barcode }],
+    ["ArticleLoad", { article: { Barcode: barcode } }]
+  ];
+
+  const diagnostics = [];
+  for (const [method, body] of attempts) {
+    try {
+      const data = await fetchJson(origin + `/services/Stock.svc/Web/${method}`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify(body)
+      }, 0);
+      const found = findArticleWithBarcode(data, barcode);
+      diagnostics.push({ method, keys: Object.keys(body), ok: true, found: Boolean(found) });
+      if (found) return { article: found, diagnostics };
+    } catch (e) {
+      diagnostics.push({
+        method,
+        keys: Object.keys(body),
+        ok: false,
+        status: e.status || null,
+        error: String(e.message || e).slice(0, 240)
+      });
+    }
+  }
+  return { article: null, diagnostics };
+}
+
 async function apiGet(path, params = {}, retryAuth = true) {
   let a = await login(false);
   const u = new URL(`${BASE}${path}`);
@@ -270,7 +342,7 @@ async function getLots(dateFrom, dateTo, extra = {}) {
 
 function simpleBranch(b) { return { id: idOf(b), code: b.Code ?? b.code ?? "", name: b.Name ?? b.name ?? "" }; }
 function simpleDepot(d) { return { id: idOf(d), code: d.Code ?? d.code ?? "", name: d.Name ?? d.name ?? "", branch: d.Branch ?? d.branch ?? null }; }
-function simpleArticle(a) { return { id: idOf(a), barcode: a.Barcode ?? a.barcode ?? "", code: a.Code ?? a.code ?? "", name: a.Name ?? a.name ?? "", price: a.Price ?? a.price ?? null, reserve: a.Reserve ?? a.reserve ?? null }; }
+function simpleArticle(a) { return { id: idOf(a), barcode: a.Barcode ?? a.barcode ?? "", additionalBarcodes: articleBarcodes(a), code: a.Code ?? a.code ?? "", name: a.Name ?? a.name ?? "", price: a.Price ?? a.price ?? null, reserve: a.Reserve ?? a.reserve ?? null }; }
 
 function docOperation(d) { return d.DocumentOperationType ?? d.documentOperationType ?? ""; }
 function docId(d) { return idOf(d.Id ?? d.id ?? d); }
@@ -389,9 +461,21 @@ function createMcpServer() {
     // For a scanned numeric barcode not found in the primary Barcode field, search
     // the complete raw article payload so alternate barcodes resolve too.
     let matchedByAlternateBarcode = false;
+    let alternateBarcodeDiagnostics = null;
     if (/^\d{8,14}$/.test(query) && matchedRaw.length === 0) {
-      matchedRaw = articles.filter(a => JSON.stringify(a).includes(query));
+      matchedRaw = articles.filter(a => articleBarcodes(a).includes(query) || JSON.stringify(a).includes(query));
       matchedByAlternateBarcode = matchedRaw.length > 0;
+
+      if (matchedRaw.length === 0) {
+        const legacy = await legacySearchAdditionalBarcode(query);
+        alternateBarcodeDiagnostics = legacy.diagnostics;
+        if (legacy.article) {
+          const legacyId = idOf(legacy.article);
+          const canonical = legacyId ? articleCache.byId.get(legacyId) : null;
+          matchedRaw = [canonical ? { ...canonical, ArticleBarcodes: articleBarcodes(legacy.article) } : legacy.article];
+          matchedByAlternateBarcode = true;
+        }
+      }
     }
 
     const items = matchedRaw.slice(0, limit).map(a => ({
@@ -415,7 +499,12 @@ function createMcpServer() {
       }
     }
 
-    return jsonReply({ query, count: items.length, products: items });
+    return jsonReply({
+      query,
+      count: items.length,
+      products: items,
+      ...(items.length === 0 && alternateBarcodeDiagnostics ? { alternateBarcodeDiagnostics } : {})
+    });
   });
 
   mcp.registerTool("current_stock", {

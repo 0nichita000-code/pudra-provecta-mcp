@@ -372,6 +372,26 @@ async function getArticleBarcodePredicateSchema() {
   return null;
 }
 
+
+async function getStringCriteriaSchema() {
+  try {
+    const origin = new URL(BASE).origin;
+    const needle = 'name="CriteriaOfArrayOfstringuHEDJ7Dj"';
+    for (let i = 0; i <= 11; i++) {
+      const body = await fetchJson(origin + "/services/Stock.svc?xsd=xsd" + i, {
+        method: "GET",
+        headers: { "Accept": "application/xml,text/xml,*/*" }
+      }, 0);
+      const x = typeof body === "string" ? body : JSON.stringify(body);
+      const p = x.indexOf(needle);
+      if (p >= 0) return { xsd: i, excerpt: x.slice(Math.max(0, p - 1200), p + 6000) };
+    }
+  } catch (e) {
+    return { error: String(e.message || e).slice(0, 300) };
+  }
+  return null;
+}
+
 async function modernSearchAdditionalBarcode(barcode) {
   const diagnostics = [];
 
@@ -730,7 +750,8 @@ function createMcpServer() {
         } else {
           const legacy = await legacySearchAdditionalBarcode(query);
           const predicateSchema = legacy.article ? null : await getArticleBarcodePredicateSchema();
-          alternateBarcodeDiagnostics.push({ source: "legacy", diagnostics: legacy.diagnostics, predicateSchema });
+          const stringCriteriaSchema = legacy.article ? null : await getStringCriteriaSchema();
+          alternateBarcodeDiagnostics.push({ source: "legacy", diagnostics: legacy.diagnostics, predicateSchema, stringCriteriaSchema });
           if (legacy.article) {
             const legacyId = idOf(legacy.article);
             const canonical = legacyId ? articleCache.byId.get(legacyId) : null;

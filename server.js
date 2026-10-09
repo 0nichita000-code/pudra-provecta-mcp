@@ -71,31 +71,44 @@ async function login(force = false) {
   const now = Date.now();
   if (!force && authCache.token && authCache.client && authCache.expiresAt > now + 120000) return authCache;
 
-  const attempts = [USERNAME];
-  const lower = USERNAME.toLowerCase();
-  if (lower !== USERNAME) attempts.push(lower);
-
+  const usernames = [...new Set([USERNAME, USERNAME.toLowerCase()])];
+  const variants = ["query-plain", "query-json-header", "form-body", "json-body"];
   let lastError;
-  for (const username of attempts) {
-    try {
-      const u = new URL(`${BASE}/v1/framework/common/login`);
-      u.searchParams.set("username", username);
-      u.searchParams.set("password", PASSWORD);
-      const data = await fetchJson(u.toString(), {
-        method: "POST",
-        headers: { "Accept": "application/json, */*", "Content-Type": "application/json" }
-      }, 0);
-      const token = data?.token || data?.Token;
-      const client = extractClient(data?.clients || data?.Clients);
-      if (!token) throw new Error("Provecta login response has no token");
-      if (!client) throw new Error("Provecta login response has no client identifier");
-      let ttlMs = Number(data?.expiresIn || data?.ExpiresIn || 3600000);
-      if (!Number.isFinite(ttlMs) || ttlMs <= 0) ttlMs = 3600000;
-      authCache = { token, client, expiresAt: Date.now() + Math.min(ttlMs, 7 * 24 * 3600000) };
-      return authCache;
-    } catch (e) {
-      lastError = e;
-      if (e.status !== 403) break;
+
+  for (const username of usernames) {
+    for (const variant of variants) {
+      try {
+        const u = new URL(`${BASE}/v1/framework/common/login`);
+        const headers = { "Accept": "application/json, */*" };
+        const options = { method: "POST", headers };
+
+        if (variant === "query-plain" || variant === "query-json-header") {
+          u.searchParams.set("username", username);
+          u.searchParams.set("password", PASSWORD);
+          if (variant === "query-json-header") headers["Content-Type"] = "application/json";
+        } else if (variant === "form-body") {
+          headers["Content-Type"] = "application/x-www-form-urlencoded";
+          options.body = new URLSearchParams({ username, password: PASSWORD }).toString();
+        } else if (variant === "json-body") {
+          headers["Content-Type"] = "application/json";
+          options.body = JSON.stringify({ username, password: PASSWORD });
+        }
+
+        const data = await fetchJson(u.toString(), options, 0);
+        const token = data?.token || data?.Token;
+        const client = extractClient(data?.clients || data?.Clients);
+        if (!token) throw new Error("Provecta login response has no token");
+        if (!client) throw new Error("Provecta login response has no client identifier");
+
+        let ttlMs = Number(data?.expiresIn || data?.ExpiresIn || 3600000);
+        if (!Number.isFinite(ttlMs) || ttlMs <= 0) ttlMs = 3600000;
+        authCache = { token, client, expiresAt: Date.now() + Math.min(ttlMs, 7 * 24 * 3600000) };
+        return authCache;
+      } catch (e) {
+        lastError = e;
+        console.error("Provecta login attempt failed", { variant, usernameVariant: username === USERNAME ? "exact" : "lower", status: e.status || null, body: e.body || null });
+        if (e.status && e.status !== 400 && e.status !== 401 && e.status !== 403 && e.status < 500) throw e;
+      }
     }
   }
   throw lastError;

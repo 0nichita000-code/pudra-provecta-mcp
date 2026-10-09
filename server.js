@@ -392,6 +392,27 @@ async function getStringCriteriaSchema() {
   return null;
 }
 
+
+async function getLegacyLoginSchema() {
+  try {
+    const origin = new URL(BASE).origin;
+    const wsdl = await fetchJson(origin + "/services/Framework/Common.svc?wsdl", {
+      method: "GET",
+      headers: { "Accept": "application/xml,text/xml,*/*" }
+    }, 0);
+    const raw = typeof wsdl === "string" ? wsdl : JSON.stringify(wsdl);
+    const locations = [...raw.matchAll(/schemaLocation="([^"]+)"/g)].map(m => m[1]);
+    for (const loc of locations) {
+      const url = new URL(loc, origin + "/services/Framework/Common.svc?wsdl").toString();
+      const body = await fetchJson(url, { method:"GET", headers:{ "Accept":"application/xml,text/xml,*/*" } }, 0);
+      const x = typeof body === "string" ? body : JSON.stringify(body);
+      const p = x.indexOf('name="Login"');
+      if (p >= 0) return { url, excerpt: x.slice(Math.max(0,p-1200),p+5500) };
+    }
+  } catch(e) { return { error:String(e.message||e).slice(0,300) }; }
+  return null;
+}
+
 async function modernSearchAdditionalBarcode(barcode) {
   const diagnostics = [];
 
@@ -751,7 +772,8 @@ function createMcpServer() {
           const legacy = await legacySearchAdditionalBarcode(query);
           const predicateSchema = legacy.article ? null : await getArticleBarcodePredicateSchema();
           const stringCriteriaSchema = legacy.article ? null : await getStringCriteriaSchema();
-          alternateBarcodeDiagnostics.push({ source: "legacy", diagnostics: legacy.diagnostics, predicateSchema, stringCriteriaSchema });
+          const loginSchema = legacy.article ? null : await getLegacyLoginSchema();
+          alternateBarcodeDiagnostics.push({ source: "legacy", diagnostics: legacy.diagnostics, predicateSchema, stringCriteriaSchema, loginSchema });
           if (legacy.article) {
             const legacyId = idOf(legacy.article);
             const canonical = legacyId ? articleCache.byId.get(legacyId) : null;

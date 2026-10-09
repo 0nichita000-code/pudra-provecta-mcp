@@ -125,7 +125,8 @@ function safeTokenSummary(t) {
 async function legacyAuthDiagnostic() {
   const attempts = [];
   const loginBodies = [
-    { userCode: USERNAME, userPassword: PASSWORD }
+    { userCode: USERNAME, userPassword: PASSWORD },
+    { userCode: String(USERNAME || "").toLowerCase(), userPassword: PASSWORD }
   ];
   const headerSets = [
     {},

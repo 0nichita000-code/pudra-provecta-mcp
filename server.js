@@ -116,19 +116,42 @@ async function login(force = false) {
   throw lastError;
 }
 
-async function legacyArticleLoad(articleId) {
-  let a = await login(false);
+async function legacyPost(method, body) {
+  const a = await login(false);
   const origin = new URL(BASE).origin;
-  return fetchJson(origin + "/services/Stock.svc/Web/ArticleLoad", {
-    method: "POST",
-    headers: {
-      "Accept": "application/json, */*",
-      "Content-Type": "application/json; charset=utf-8",
-      "Authorization": `Bearer ${a.token}`,
-      "Client": a.client
-    },
-    body: JSON.stringify({ article: { Id: articleId } })
-  }, 0);
+  const baseHeaders = {
+    "Accept": "application/json, */*",
+    "Content-Type": "application/json; charset=utf-8",
+    "Client": a.client,
+    "X-Requested-With": "XMLHttpRequest"
+  };
+  const variants = [
+    { ...baseHeaders, "Authorization": `Bearer ${a.token}` },
+    { ...baseHeaders, "Authorization": a.token },
+    { ...baseHeaders, "Token": a.token },
+    { ...baseHeaders, "Authorization": `Bearer ${a.token}`, "ClientId": a.client }
+  ];
+  let last = null;
+  for (let i = 0; i < variants.length; i++) {
+    try {
+      const data = await fetchJson(origin + `/services/Stock.svc/Web/${method}`, {
+        method: "POST",
+        headers: variants[i],
+        body: JSON.stringify(body)
+      }, 0);
+      if (data !== null && data !== undefined && data !== "") return { data, authVariant: i };
+      last = { data, authVariant: i };
+    } catch (e) {
+      last = { error: e, authVariant: i };
+    }
+  }
+  if (last?.error) throw last.error;
+  return last || { data: null, authVariant: -1 };
+}
+
+async function legacyArticleLoad(articleId) {
+  const r = await legacyPost("ArticleLoad", { article: { Id: articleId } });
+  return r?.data ?? null;
 }
 
 function articleBarcodes(a) {
@@ -158,15 +181,6 @@ function findArticleWithBarcode(payload, barcode, depth = 0) {
 }
 
 async function legacySearchAdditionalBarcode(barcode) {
-  const a = await login(false);
-  const origin = new URL(BASE).origin;
-  const headers = {
-    "Accept": "application/json, */*",
-    "Content-Type": "application/json; charset=utf-8",
-    "Authorization": `Bearer ${a.token}`,
-    "Client": a.client
-  };
-
   // Provecta's web UI uses the legacy Stock.svc methods and returns
   // ArticleBarcodes there, while /v1/stock/article/select omits them.
   // Try the common WCF payload shapes used by the UI.
@@ -182,13 +196,19 @@ async function legacySearchAdditionalBarcode(barcode) {
   const diagnostics = [];
   for (const [method, body] of attempts) {
     try {
-      const data = await fetchJson(origin + `/services/Stock.svc/Web/${method}`, {
-        method: "POST",
-        headers,
-        body: JSON.stringify(body)
-      }, 0);
+      const result = await legacyPost(method, body);
+      const data = result?.data;
       const found = findArticleWithBarcode(data, barcode);
-      diagnostics.push({ method, keys: Object.keys(body), ok: true, found: Boolean(found) });
+      diagnostics.push({
+        method,
+        keys: Object.keys(body),
+        ok: true,
+        found: Boolean(found),
+        authVariant: result?.authVariant ?? null,
+        responseType: Array.isArray(data) ? "array" : typeof data,
+        responseKeys: data && typeof data === "object" && !Array.isArray(data) ? Object.keys(data).slice(0, 12) : null,
+        responseLength: Array.isArray(data) ? data.length : null
+      });
       if (found) return { article: found, diagnostics };
     } catch (e) {
       diagnostics.push({

@@ -324,6 +324,35 @@ function findArticleWithBarcode(payload, barcode, depth = 0) {
 }
 
 
+
+function findBarcodeRecord(payload, barcode, depth = 0) {
+  if (payload == null || depth > 10) return null;
+  if (Array.isArray(payload)) {
+    for (const x of payload) {
+      const r = findBarcodeRecord(x, barcode, depth + 1);
+      if (r) return r;
+    }
+    return null;
+  }
+  if (typeof payload !== "object") return null;
+  for (const v of Object.values(payload)) {
+    if ((typeof v === "string" || typeof v === "number") && String(v).trim() === barcode) return payload;
+  }
+  for (const v of Object.values(payload)) {
+    if (v && typeof v === "object") {
+      const r = findBarcodeRecord(v, barcode, depth + 1);
+      if (r) return r;
+    }
+  }
+  return null;
+}
+
+function articleIdFromBarcodeRecord(r) {
+  if (!r || typeof r !== "object") return "";
+  return idOf(r.Article ?? r.article ?? r.OwnerArticle ?? r.ownerArticle ?? r.ArticleIdentity ?? r.articleIdentity)
+    || String(r.ArticleId ?? r.articleId ?? "").trim();
+}
+
 async function modernSearchAdditionalBarcode(barcode) {
   const diagnostics = [];
   const candidates = [
@@ -355,45 +384,26 @@ async function modernSearchAdditionalBarcode(barcode) {
 }
 
 async function legacySearchAdditionalBarcode(barcode) {
-  // Provecta's web UI uses the legacy Stock.svc methods and returns
-  // ArticleBarcodes there, while /v1/stock/article/select omits them.
-  // Try the common WCF payload shapes used by the UI.
-  const attempts = [
-    ["ArticleSearch", { articlePredicate: { Barcodes: { Value: [barcode] } } }],
-    ["ArticleSearch", { articlePredicate: { Barcodes: { IsExcluded: false, IsNull: false, Value: [barcode] } } }],
-    ["ArticleSearch", { article: { Barcode: barcode } }],
-    ["ArticleSearch", { barcode }],
-    ["ArticleSearch", { Barcode: barcode }],
-    ["ArticleSearch", { text: barcode }],
-    ["ArticleSearch", { search: barcode }],
-    ["ArticleLoad", { article: { Barcode: barcode } }]
-  ];
-
   const diagnostics = [];
-  for (const [method, body] of attempts) {
+  const bodies = [
+    { articleBarcodePredicate: {} },
+    { articleBarcodePredicate: { Barcode: barcode } },
+    { articleBarcodePredicate: { Code: barcode } },
+    { articleBarcodePredicate: { Value: barcode } }
+  ];
+  for (const body of bodies) {
     try {
-      const result = await legacyPost(method, body);
+      const result = await legacyPost("ArticleBarcodeSearch", body);
       const data = result?.data;
-      const found = findArticleWithBarcode(data, barcode);
-      diagnostics.push({
-        method,
-        keys: Object.keys(body),
-        ok: true,
-        found: Boolean(found),
-        authVariant: result?.authVariant ?? null,
-        responseType: Array.isArray(data) ? "array" : typeof data,
-        responseKeys: data && typeof data === "object" && !Array.isArray(data) ? Object.keys(data).slice(0, 12) : null,
-        responseLength: Array.isArray(data) ? data.length : null
-      });
-      if (found) return { article: found, diagnostics };
+      const record = findBarcodeRecord(data, barcode);
+      const articleId = articleIdFromBarcodeRecord(record);
+      diagnostics.push({ method: "ArticleBarcodeSearch", keys: Object.keys(body.articleBarcodePredicate), foundRecord: !!record, articleId, authVariant: result?.authVariant ?? null });
+      if (articleId) {
+        const canonical = articleCache.byId.get(articleId);
+        if (canonical) return { article: { ...canonical, ArticleBarcodes: [...new Set([...articleBarcodes(canonical), barcode])] }, diagnostics };
+      }
     } catch (e) {
-      diagnostics.push({
-        method,
-        keys: Object.keys(body),
-        ok: false,
-        status: e.status || null,
-        error: String(e.message || e).slice(0, 240)
-      });
+      diagnostics.push({ method: "ArticleBarcodeSearch", keys: Object.keys(body.articleBarcodePredicate), status: e.status || null, error: String(e.message || e).slice(0, 180) });
     }
   }
   return { article: null, diagnostics };

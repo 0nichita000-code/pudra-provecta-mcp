@@ -116,27 +116,110 @@ async function login(force = false) {
   throw lastError;
 }
 
-async function legacyPost(method, body) {
-  const a = await login(false);
+let legacyAuthCache = { code: "", expiresAt: 0 };
+
+async function legacyCommonCall(method, body, extraHeaders = {}) {
   const origin = new URL(BASE).origin;
+  return fetchJson(origin + `/services/Framework/Common.svc/Web/${method}`, {
+    method: "POST",
+    headers: {
+      "Accept": "application/json, */*",
+      "Content-Type": "application/json; charset=utf-8",
+      "X-Requested-With": "XMLHttpRequest",
+      ...extraHeaders
+    },
+    body: JSON.stringify(body)
+  }, 0);
+}
+
+function unwrapLegacyToken(data, field) {
+  if (!data || typeof data !== "object") return null;
+  const token = data[field] ?? data[field?.toLowerCase?.()] ?? data;
+  return token && typeof token === "object" ? token : null;
+}
+
+async function getLegacyToken(force = false) {
+  if (!force && legacyAuthCache.code && legacyAuthCache.expiresAt > Date.now() + 60000) return legacyAuthCache.code;
+
+  const modern = await login(false);
+  const mxHeader = ["X", "Mx", "ReqToken"].join("-");
+  const orgBodies = [
+    { organisation: { Id: modern.client } },
+    { organisation: { id: modern.client } }
+  ];
+
+  const tryAuthenticate = async (seedToken) => {
+    if (!seedToken) return "";
+    const headers = [
+      { [mxHeader]: seedToken },
+      { "TokenCode": seedToken },
+      { [mxHeader]: seedToken, "TokenCode": seedToken },
+      { "Authorization": seedToken },
+      { "Authorization": `Bearer ${seedToken}` }
+    ];
+    for (const h of headers) {
+      for (const body of orgBodies) {
+        try {
+          const data = await legacyCommonCall("Authentication", body, h);
+          const token = unwrapLegacyToken(data, "AuthenticationResult");
+          const code = String(token?.Code ?? token?.code ?? "").trim();
+          if (code) return code;
+        } catch {}
+      }
+    }
+    return "";
+  };
+
+  // First try to convert the working modern API token into the legacy web token.
+  let code = await tryAuthenticate(modern.token);
+  if (code) {
+    legacyAuthCache = { code, expiresAt: Date.now() + 30 * 60 * 1000 };
+    return code;
+  }
+
+  // Fall back to the legacy Common/Login flow.
+  for (const userCode of [...new Set([USERNAME, String(USERNAME || "").toLowerCase()])]) {
+    try {
+      const data = await legacyCommonCall("Login", { userCode, userPassword: PASSWORD });
+      const token = unwrapLegacyToken(data, "LoginResult");
+      const loginCode = String(token?.Code ?? token?.code ?? "").trim();
+      if (!loginCode) continue;
+
+      code = await tryAuthenticate(loginCode);
+      if (!code) code = loginCode;
+      legacyAuthCache = { code, expiresAt: Date.now() + 30 * 60 * 1000 };
+      return code;
+    } catch {}
+  }
+
+  return "";
+}
+
+async function legacyPost(method, body) {
+  const modern = await login(false);
+  const origin = new URL(BASE).origin;
+  const mxHeader = ["X", "Mx", "ReqToken"].join("-");
   const baseHeaders = {
     "Accept": "application/json, */*",
     "Content-Type": "application/json; charset=utf-8",
-    "Client": a.client,
+    "Client": modern.client,
     "X-Requested-With": "XMLHttpRequest"
   };
-  const variants = [
-    { ...baseHeaders, "Authorization": `Bearer ${a.token}` },
-    { ...baseHeaders, "Authorization": a.token },
-    { ...baseHeaders, "Token": a.token },
-    { ...baseHeaders, "Authorization": `Bearer ${a.token}`, "ClientId": a.client },
-    { ...baseHeaders, "TokenCode": a.token },
-    { ...baseHeaders, "X-Ws-ReqToken": a.token },
-    { ...baseHeaders, "TokenCode": a.token, "X-Ws-ReqToken": a.token },
-    { ...baseHeaders, "Authorization": a.token, "TokenCode": a.token },
-    { ...baseHeaders, "Authorization": `Bearer ${a.token}`, "TokenCode": a.token },
-    { ...baseHeaders, "TokenCode": a.token, "ClientUUID": a.client, "ApplicationCode": "ProvectaPOS.Central", "CultureCode": "ru-RU" }
-  ];
+
+  const legacyCode = await getLegacyToken(false);
+  const tokens = [...new Set([legacyCode, modern.token].filter(Boolean))];
+  const variants = [];
+
+  for (const token of tokens) {
+    variants.push(
+      { ...baseHeaders, [mxHeader]: token },
+      { ...baseHeaders, "TokenCode": token },
+      { ...baseHeaders, [mxHeader]: token, "TokenCode": token },
+      { ...baseHeaders, "Authorization": token },
+      { ...baseHeaders, "Authorization": `Bearer ${token}` }
+    );
+  }
+
   let last = null;
   for (let i = 0; i < variants.length; i++) {
     try {
@@ -145,14 +228,14 @@ async function legacyPost(method, body) {
         headers: variants[i],
         body: JSON.stringify(body)
       }, 0);
-      if (data !== null && data !== undefined && data !== "") return { data, authVariant: i };
-      last = { data, authVariant: i };
+      if (data !== null && data !== undefined && data !== "") return { data, authVariant: i, legacyToken: Boolean(legacyCode) };
+      last = { data, authVariant: i, legacyToken: Boolean(legacyCode) };
     } catch (e) {
-      last = { error: e, authVariant: i };
+      last = { error: e, authVariant: i, legacyToken: Boolean(legacyCode) };
     }
   }
   if (last?.error) throw last.error;
-  return last || { data: null, authVariant: -1 };
+  return last || { data: null, authVariant: -1, legacyToken: Boolean(legacyCode) };
 }
 
 async function legacyArticleLoad(articleId) {

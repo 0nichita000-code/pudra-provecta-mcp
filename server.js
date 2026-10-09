@@ -118,6 +118,21 @@ async function login(force = false) {
 
 let legacyAuthCache = { code: "", expiresAt: 0 };
 
+async function fetchLegacyStockWsdlSnippet() {
+  try {
+    const origin = new URL(BASE).origin;
+    const text = await fetchJson(origin + "/services/Stock.svc?wsdl", {
+      method: "GET",
+      headers: { "Accept": "application/xml,text/xml,*/*" }
+    }, 0);
+    const raw = typeof text === "string" ? text : JSON.stringify(text);
+    const i = raw.indexOf("ArticleSearch");
+    return i >= 0 ? raw.slice(Math.max(0, i - 3000), i + 7000) : raw.slice(0, 10000);
+  } catch (e) {
+    return "WSDL_ERROR: " + String(e.message || e).slice(0, 1000);
+  }
+}
+
 async function legacyCommonCall(method, body, extraHeaders = {}) {
   const origin = new URL(BASE).origin;
   return fetchJson(origin + `/services/Framework/Common.svc/Web/${method}`, {
@@ -578,7 +593,8 @@ function createMcpServer() {
     } catch {}
     let legacyTest = null;
     try { legacyTest = await legacyArticleLoad("10237072-ca4a-f111-8cc5-9c6b0045fe69"); } catch (e) { legacyTest = { error: e.message, status: e.status || null }; }
-    return jsonReply({ ok: true, client: a.client, branches: branches.map(simpleBranch), depots: depots.map(simpleDepot), schema, legacyTest });
+    const legacyWsdl = await fetchLegacyStockWsdlSnippet();
+    return jsonReply({ ok: true, client: a.client, branches: branches.map(simpleBranch), depots: depots.map(simpleDepot), schema, legacyTest, legacyWsdl });
   });
 
   mcp.registerTool("list_branches", {

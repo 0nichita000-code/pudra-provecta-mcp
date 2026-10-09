@@ -142,7 +142,8 @@ async function getLegacyToken(force = false) {
   if (!force && legacyAuthCache.code && legacyAuthCache.expiresAt > Date.now() + 60000) return legacyAuthCache.code;
 
   const modern = await login(false);
-  const mxHeader = ["X", "Mx", "ReqToken"].join("-");
+  const mxHeader = ["X", "Mx", "Token"].join("-");
+  const mxReqHeader = ["X", "Mx", "ReqToken"].join("-");
   const orgBodies = [
     { organisation: { Id: modern.client } },
     { organisation: { id: modern.client } }
@@ -152,8 +153,10 @@ async function getLegacyToken(force = false) {
     if (!seedToken) return "";
     const headers = [
       { [mxHeader]: seedToken },
+      { [mxReqHeader]: seedToken },
       { "TokenCode": seedToken },
       { [mxHeader]: seedToken, "TokenCode": seedToken },
+      { [mxReqHeader]: seedToken, "TokenCode": seedToken },
       { "Authorization": seedToken },
       { "Authorization": `Bearer ${seedToken}` }
     ];
@@ -198,7 +201,8 @@ async function getLegacyToken(force = false) {
 async function legacyPost(method, body) {
   const modern = await login(false);
   const origin = new URL(BASE).origin;
-  const mxHeader = ["X", "Mx", "ReqToken"].join("-");
+  const mxHeader = ["X", "Mx", "Token"].join("-");
+  const mxReqHeader = ["X", "Mx", "ReqToken"].join("-");
   const baseHeaders = {
     "Accept": "application/json, */*",
     "Content-Type": "application/json; charset=utf-8",
@@ -213,8 +217,10 @@ async function legacyPost(method, body) {
   for (const token of tokens) {
     variants.push(
       { ...baseHeaders, [mxHeader]: token },
+      { ...baseHeaders, [mxReqHeader]: token },
       { ...baseHeaders, "TokenCode": token },
       { ...baseHeaders, [mxHeader]: token, "TokenCode": token },
+      { ...baseHeaders, [mxReqHeader]: token, "TokenCode": token },
       { ...baseHeaders, "Authorization": token },
       { ...baseHeaders, "Authorization": `Bearer ${token}` }
     );

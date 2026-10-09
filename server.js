@@ -129,7 +129,13 @@ async function legacyPost(method, body) {
     { ...baseHeaders, "Authorization": `Bearer ${a.token}` },
     { ...baseHeaders, "Authorization": a.token },
     { ...baseHeaders, "Token": a.token },
-    { ...baseHeaders, "Authorization": `Bearer ${a.token}`, "ClientId": a.client }
+    { ...baseHeaders, "Authorization": `Bearer ${a.token}`, "ClientId": a.client },
+    { ...baseHeaders, "TokenCode": a.token },
+    { ...baseHeaders, "X-Ws-ReqToken": a.token },
+    { ...baseHeaders, "TokenCode": a.token, "X-Ws-ReqToken": a.token },
+    { ...baseHeaders, "Authorization": a.token, "TokenCode": a.token },
+    { ...baseHeaders, "Authorization": `Bearer ${a.token}`, "TokenCode": a.token },
+    { ...baseHeaders, "TokenCode": a.token, "ClientUUID": a.client, "ApplicationCode": "ProvectaPOS.Central", "CultureCode": "ru-RU" }
   ];
   let last = null;
   for (let i = 0; i < variants.length; i++) {

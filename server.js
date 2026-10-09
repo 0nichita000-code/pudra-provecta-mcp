@@ -314,7 +314,26 @@ function createMcpServer() {
     annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: true }
   }, async ({ query, limit = 30 }) => {
     const q = query.toLowerCase();
-    const items = (await getArticles(false)).filter(a => [a.Name, a.name, a.Barcode, a.barcode, a.Code, a.code].some(v => String(v || "").toLowerCase().includes(q))).slice(0, limit).map(simpleArticle);
+    const items = (await getArticles(false))
+      .filter(a => [a.Name, a.name, a.Barcode, a.barcode, a.Code, a.code].some(v => String(v || "").toLowerCase().includes(q)))
+      .slice(0, limit)
+      .map(simpleArticle);
+
+    // Fast barcode workflow: when one exact numeric barcode is scanned,
+    // fetch balances for all depots concurrently and return them in the same MCP call.
+    if (/^\d{8,14}$/.test(query) && items.length === 1 && String(items[0].barcode || "") === query) {
+      const depots = await getDepots(false);
+      const articleId = items[0].id;
+      const stocks = await Promise.all(depots.map(async d => {
+        const sd = simpleDepot(d);
+        const rows = asArray(await apiGet("/v1/resume/currentBalance", { depotId: [sd.id] }));
+        const hit = rows.find(x => (x?.Article?.Id || x?.article?.id) === articleId);
+        return { id: sd.id, name: sd.name, quantity: Number(hit?.BalanceQuantitySum || 0) };
+      }));
+      const totalQuantity = stocks.reduce((sum, x) => sum + x.quantity, 0);
+      return jsonReply({ query, count: 1, products: [{ ...items[0], stocks, totalQuantity }] });
+    }
+
     return jsonReply({ query, count: items.length, products: items });
   });
 

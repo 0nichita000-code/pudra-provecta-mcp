@@ -33,3 +33,29 @@ const wsdlReplacement = `    let legacyTest = null;
 if (s.includes(wsdlTarget)) s = s.replace(wsdlTarget, wsdlReplacement);
 
 fs.writeFileSync(path, s);
+
+
+const attemptsTarget = `  const attempts = [
+    ["ArticleSearch", { article: { Barcode: barcode } }],
+    ["ArticleSearch", { barcode }],
+    ["ArticleSearch", { Barcode: barcode }],
+    ["ArticleSearch", { text: barcode }],
+    ["ArticleSearch", { search: barcode }],
+    ["ArticleLoad", { article: { Barcode: barcode } }]
+  ];`;
+
+const attemptsReplacement = `  const attempts = [
+    ["ArticleSearch", { articlePredicate: { Barcodes: { Value: [barcode] } } }],
+    ["ArticleSearch", { articlePredicate: { Barcodes: { IsExcluded: false, IsNull: false, Value: [barcode] } } }],
+    ["ArticleSearch", { article: { Barcode: barcode } }],
+    ["ArticleSearch", { barcode }],
+    ["ArticleSearch", { Barcode: barcode }],
+    ["ArticleSearch", { text: barcode }],
+    ["ArticleSearch", { search: barcode }],
+    ["ArticleLoad", { article: { Barcode: barcode } }]
+  ];`;
+
+if (s.includes(attemptsTarget)) s = s.replace(attemptsTarget, attemptsReplacement);
+
+
+fs.writeFileSync(path, s);

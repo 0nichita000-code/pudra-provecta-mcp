@@ -5,7 +5,6 @@ let s = fs.readFileSync(path, "utf8");
 
 s = s.replaceAll('"X-Ws-ReqToken"', '"X-Mx-ReqToken"');
 
-fs.writeFileSync(path, s);
 
 const wsdlTarget = `    let legacyTest = null;
     try { legacyTest = await legacyArticleLoad("10237072-ca4a-f111-8cc5-9c6b0045fe69"); } catch (e) { legacyTest = { error: e.message, status: e.status || null }; }
@@ -32,3 +31,5 @@ const wsdlReplacement = `    let legacyTest = null;
     return jsonReply({ ok: true, client: a.client, branches: branches.map(simpleBranch), depots: depots.map(simpleDepot), schema, legacyTest, legacyWsdl });`;
 
 if (s.includes(wsdlTarget)) s = s.replace(wsdlTarget, wsdlReplacement);
+
+fs.writeFileSync(path, s);

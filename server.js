@@ -22,6 +22,7 @@ let authCache = { token: "", client: "", expiresAt: 0 };
 let articleCache = { at: 0, items: [], byId: new Map(), byBarcode: new Map() };
 let branchCache = { at: 0, items: [] };
 let depotCache = { at: 0, items: [] };
+let stockCache = { at: 0, byArticle: new Map(), ready: false, refreshing: false };
 
 function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
 
@@ -188,6 +189,48 @@ async function getArticles(force = false) {
   return items;
 }
 
+async function refreshStockCache(force = false) {
+  if (stockCache.refreshing) return;
+  if (!force && stockCache.ready && Date.now() - stockCache.at < 5 * 60 * 1000) return;
+
+  stockCache.refreshing = true;
+  try {
+    const depots = (await getDepots(false)).map(simpleDepot).filter(d => d.id);
+    const byArticle = new Map();
+
+    for (let i = 0; i < depots.length; i += 2) {
+      const batch = depots.slice(i, i + 2);
+      const results = await Promise.all(batch.map(async depot => {
+        const rows = asArray(await apiGet("/v1/resume/currentBalance", { depotId: [depot.id] }));
+        return { depot, rows };
+      }));
+
+      for (const { depot, rows } of results) {
+        for (const row of rows) {
+          const aid = idOf(row.Article ?? row.article ?? row.ArticleId ?? row.articleId);
+          if (!aid) continue;
+          const qty = Number(row.BalanceQuantitySum ?? row.balanceQuantitySum ?? 0) || 0;
+          if (!byArticle.has(aid)) byArticle.set(aid, []);
+          byArticle.get(aid).push({ id: depot.id, name: depot.name, quantity: qty });
+        }
+      }
+    }
+
+    stockCache = { at: Date.now(), byArticle, ready: true, refreshing: false };
+    console.log(`Stock cache ready: ${byArticle.size} articles across depots`);
+  } catch (e) {
+    stockCache.refreshing = false;
+    console.error("Stock cache refresh failed", e?.message || e);
+  }
+}
+
+function getCachedStocks(articleId) {
+  if (!stockCache.ready) return null;
+  const depots = depotCache.items.map(simpleDepot).filter(d => d.id);
+  const found = new Map((stockCache.byArticle.get(articleId) || []).map(x => [x.id, x]));
+  return depots.map(d => found.get(d.id) || { id: d.id, name: d.name, quantity: 0 });
+}
+
 function normalizeDateTime(s, end = false) {
   if (!s) return undefined;
   return s;
@@ -319,19 +362,20 @@ function createMcpServer() {
       .slice(0, limit)
       .map(simpleArticle);
 
-    // Fast barcode workflow: when one exact numeric barcode is scanned,
-    // fetch balances for all depots concurrently and return them in the same MCP call.
     if (/^\d{8,14}$/.test(query) && items.length === 1 && String(items[0].barcode || "") === query) {
-      const depots = await getDepots(false);
-      const articleId = items[0].id;
-      const stocks = await Promise.all(depots.map(async d => {
-        const sd = simpleDepot(d);
-        const rows = asArray(await apiGet("/v1/resume/currentBalance", { depotId: [sd.id] }));
-        const hit = rows.find(x => (x?.Article?.Id || x?.article?.id) === articleId);
-        return { id: sd.id, name: sd.name, quantity: Number(hit?.BalanceQuantitySum || 0) };
-      }));
-      const totalQuantity = stocks.reduce((sum, x) => sum + x.quantity, 0);
-      return jsonReply({ query, count: 1, products: [{ ...items[0], stocks, totalQuantity }] });
+      if (!stockCache.ready) {
+        refreshStockCache(false).catch(() => {});
+        const started = Date.now();
+        while (!stockCache.ready && Date.now() - started < 2500) await sleep(100);
+      } else if (Date.now() - stockCache.at > 5 * 60 * 1000) {
+        refreshStockCache(false).catch(() => {});
+      }
+
+      const stocks = getCachedStocks(items[0].id);
+      if (stocks) {
+        const totalQuantity = stocks.reduce((sum, x) => sum + x.quantity, 0);
+        return jsonReply({ query, count: 1, products: [{ ...items[0], stocks, totalQuantity, stockCacheAgeMs: Date.now() - stockCache.at }] });
+      }
     }
 
     return jsonReply({ query, count: items.length, products: items });
@@ -663,4 +707,8 @@ const httpServer = createServer(async (req, res) => {
 
 httpServer.listen(PORT, "0.0.0.0", () => {
   console.log(`PUDRA Provecta MCP listening on :${PORT}${MCP_PATH}`);
+  Promise.all([getArticles(false), getDepots(false)])
+    .then(() => refreshStockCache(true))
+    .catch(e => console.error("Warm-up failed", e?.message || e));
+  setInterval(() => refreshStockCache(false).catch(() => {}), 5 * 60 * 1000).unref();
 });

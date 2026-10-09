@@ -405,10 +405,11 @@ async function modernSearchAdditionalBarcode(barcode) {
 async function legacySearchAdditionalBarcode(barcode) {
   const diagnostics = [];
   const bodies = [
-    { articleBarcodePredicate: {} },
-    { articleBarcodePredicate: { Barcode: barcode } },
-    { articleBarcodePredicate: { Code: barcode } },
-    { articleBarcodePredicate: { Value: barcode } }
+    { articleBarcodePredicate: { Values: { Value: [barcode] } } },
+    { articleBarcodePredicate: { Values: { IsExcluded: false, IsNull: false, Value: [barcode] } } },
+    { articleBarcodePredicate: { Values: { Values: [barcode] } } },
+    { articleBarcodePredicate: { Values: [barcode] } },
+    { articleBarcodePredicate: {} }
   ];
   for (const body of bodies) {
     try {

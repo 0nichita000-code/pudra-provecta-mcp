@@ -59,3 +59,27 @@ if (s.includes(attemptsTarget)) s = s.replace(attemptsTarget, attemptsReplacemen
 
 
 fs.writeFileSync(path, s);
+
+
+const commonTarget = `    return jsonReply({ ok: true, client: a.client, branches: branches.map(simpleBranch), depots: depots.map(simpleDepot), schema, legacyTest, legacyWsdl });`;
+const commonReplacement = `    let legacyCommonWsdl = null;
+    try {
+      const origin = new URL(BASE).origin;
+      const response = await fetch(origin + "/services/Framework/Common.svc?singleWsdl", { headers: { "Accept": "application/xml,text/xml,*/*" } });
+      const text = await response.text();
+      const picks = {};
+      for (const term of ["Login", "Authenticate", "Authorization", "TokenCode", "ReqToken", "UserLogin"]) {
+        const i = text.indexOf(term);
+        picks[term] = i >= 0 ? text.slice(Math.max(0, i - 1200), Math.min(text.length, i + 3500)) : null;
+      }
+      legacyCommonWsdl = { status: response.status, contentType: response.headers.get("content-type"), picks };
+    } catch (e) {
+      legacyCommonWsdl = { error: String(e.message || e).slice(0, 500) };
+    }
+
+    return jsonReply({ ok: true, client: a.client, branches: branches.map(simpleBranch), depots: depots.map(simpleDepot), schema, legacyTest, legacyWsdl, legacyCommonWsdl });`;
+
+if (s.includes(commonTarget)) s = s.replace(commonTarget, commonReplacement);
+
+
+fs.writeFileSync(path, s);

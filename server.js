@@ -334,7 +334,12 @@ function createMcpServer() {
         const x = k.toLowerCase();
         return x.includes("barcode") || x.includes("/stock/article");
       });
-      schema = Object.fromEntries(keys.map(k => [k, docs.paths[k]]));
+      const defs = docs?.definitions || {};
+      const defKeys = Object.keys(defs).filter(k => k.toLowerCase().includes("article") || k.toLowerCase().includes("barcode"));
+      schema = {
+        paths: Object.fromEntries(keys.map(k => [k, docs.paths[k]])),
+        definitions: Object.fromEntries(defKeys.map(k => [k, defs[k]]))
+      };
     } catch {}
     return jsonReply({ ok: true, client: a.client, branches: branches.map(simpleBranch), depots: depots.map(simpleDepot), schema });
   });

@@ -357,6 +357,20 @@ function createMcpServer() {
     return jsonReply({ saleOperation: SALE_OPERATION, rankBy, count: items.length, products: items, saleDocuments: s.documents.length, allDocumentOperations: s.allDocumentOperations });
   });
 
+  mcp.registerTool("debug_api_schema", {
+    title: "Debug Provecta API schema",
+    description: "Read Swagger parameter definitions for selected Provecta endpoints.",
+    inputSchema: {},
+    annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: true }
+  }, async () => {
+    const docs = await fetchJson(`${BASE}/v2/api-docs`, { method: "GET", headers: { "Accept": "application/json" } }, 0);
+    const pick = {};
+    for (const p of ["/v1/stock/document/select", "/v1/stock/lot/select"]) {
+      pick[p] = docs?.paths?.[p] || null;
+    }
+    return jsonReply({ paths: pick });
+  });
+
   mcp.registerTool("raw_lots", {
     title: "Provecta lots for a period",
     description: "Read lot/document-line records for diagnostics or detailed analysis.",

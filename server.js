@@ -311,6 +311,8 @@ async function legacySearchAdditionalBarcode(barcode) {
   // ArticleBarcodes there, while /v1/stock/article/select omits them.
   // Try the common WCF payload shapes used by the UI.
   const attempts = [
+    ["ArticleSearch", { articlePredicate: { Barcodes: { Value: [barcode] } } }],
+    ["ArticleSearch", { articlePredicate: { Barcodes: { IsExcluded: false, IsNull: false, Value: [barcode] } } }],
     ["ArticleSearch", { article: { Barcode: barcode } }],
     ["ArticleSearch", { barcode }],
     ["ArticleSearch", { Barcode: barcode }],

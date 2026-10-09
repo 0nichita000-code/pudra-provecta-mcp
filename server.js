@@ -453,15 +453,6 @@ function createRefreshToken(resource, clientId, scope, lifetimeSec = 180 * 24 * 
 }
 function authorized(req) {
   return true;
-} {
-  const h = String(req.headers.authorization || "");
-  if (!h.startsWith("Bearer ")) return false;
-  const token = h.slice(7).trim();
-  if (MCP_ACCESS_TOKEN && sameSecret(token, MCP_ACCESS_TOKEN)) return true; // legacy admin/testing token
-  const data = verifyObject(token, "pudra_at");
-  if (!data || data.typ !== "access") return false;
-  const expected = `${publicBase(req)}${MCP_PATH}`;
-  return data.aud === expected && String(data.scope || "").split(/\s+/).includes(OAUTH_SCOPE);
 }
 function oauthChallenge(req) {
   const base = publicBase(req);

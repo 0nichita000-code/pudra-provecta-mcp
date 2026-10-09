@@ -330,7 +330,10 @@ function createMcpServer() {
     let schema = null;
     try {
       const docs = await fetchJson(`${BASE}/v2/api-docs`, { method: "GET", headers: { "Accept": "application/json" } }, 0);
-      const keys = Object.keys(docs?.paths || {}).filter(k => k.includes("/stock/document/select") || k.includes("/stock/lot/select"));
+      const keys = Object.keys(docs?.paths || {}).filter(k => {
+        const x = k.toLowerCase();
+        return x.includes("barcode") || x.includes("/stock/article");
+      });
       schema = Object.fromEntries(keys.map(k => [k, docs.paths[k]]));
     } catch {}
     return jsonReply({ ok: true, client: a.client, branches: branches.map(simpleBranch), depots: depots.map(simpleDepot), schema });

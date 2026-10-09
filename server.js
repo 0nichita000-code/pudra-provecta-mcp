@@ -116,6 +116,21 @@ async function login(force = false) {
   throw lastError;
 }
 
+async function legacyArticleLoad(articleId) {
+  let a = await login(false);
+  const origin = new URL(BASE).origin;
+  return fetchJson(origin + "/services/Stock.svc/Web/ArticleLoad", {
+    method: "POST",
+    headers: {
+      "Accept": "application/json, */*",
+      "Content-Type": "application/json; charset=utf-8",
+      "Authorization": `Bearer ${a.token}`,
+      "Client": a.client
+    },
+    body: JSON.stringify({ article: { Id: articleId } })
+  }, 0);
+}
+
 async function apiGet(path, params = {}, retryAuth = true) {
   let a = await login(false);
   const u = new URL(`${BASE}${path}`);
@@ -341,7 +356,9 @@ function createMcpServer() {
         definitions: Object.fromEntries(defKeys.map(k => [k, defs[k]]))
       };
     } catch {}
-    return jsonReply({ ok: true, client: a.client, branches: branches.map(simpleBranch), depots: depots.map(simpleDepot), schema });
+    let legacyTest = null;
+    try { legacyTest = await legacyArticleLoad("10237072-ca4a-f111-8cc5-9c6b0045fe69"); } catch (e) { legacyTest = { error: e.message, status: e.status || null }; }
+    return jsonReply({ ok: true, client: a.client, branches: branches.map(simpleBranch), depots: depots.map(simpleDepot), schema, legacyTest });
   });
 
   mcp.registerTool("list_branches", {

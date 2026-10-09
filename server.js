@@ -72,7 +72,7 @@ async function login(force = false) {
   if (!force && authCache.token && authCache.client && authCache.expiresAt > now + 120000) return authCache;
 
   const usernames = [...new Set([USERNAME, USERNAME.toLowerCase()])];
-  const variants = ["query-plain", "query-json-header", "form-body", "json-body"];
+  const variants = ["json-body", "query-plain", "query-json-header", "form-body"];
   let lastError;
 
   for (const username of usernames) {

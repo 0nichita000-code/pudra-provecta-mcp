@@ -37,7 +37,7 @@ async function fetchJson(url, options = {}, retries = 2) {
       let data = text;
       try { data = text ? JSON.parse(text) : null; } catch {}
       if (!r.ok) {
-        const err = new Error(`Provecta HTTP ${r.status} ${r.statusText}`);
+        const detail = typeof data === "string" ? data.slice(0, 1000) : JSON.stringify(data)?.slice(0, 1000);\n        const err = new Error(`Provecta HTTP ${r.status} ${r.statusText}${detail ? ` | ${detail}` : ""}`);
         err.status = r.status;
         err.body = typeof data === "string" ? data.slice(0, 1000) : data;
         throw err;

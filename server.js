@@ -197,8 +197,6 @@ async function getDocuments(dateFrom, dateTo, extra = {}) {
   const params = {
     documentApprovedOnDateFrom: normalizeDateTime(dateFrom, false),
     documentApprovedOnDateTo: normalizeDateTime(dateTo || dateFrom, true),
-    documentApprovedOnIncludeTime: true,
-    order: "ApprovedOn",
     ...extra
   };
   return asArray(await apiGet("/v1/stock/document/select", params));
@@ -207,8 +205,6 @@ async function getLots(dateFrom, dateTo, extra = {}) {
   const params = {
     documentApprovedOnDateFrom: normalizeDateTime(dateFrom, false),
     documentApprovedOnDateTo: normalizeDateTime(dateTo || dateFrom, true),
-    documentApprovedOnIncludeTime: true,
-    order: "Document.ApprovedOn",
     ...extra
   };
   return asArray(await apiGet("/v1/stock/lot/select", params));

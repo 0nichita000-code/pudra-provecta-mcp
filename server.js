@@ -129,34 +129,34 @@ async function fetchLegacyStockWsdlSnippet() {
     const raw = typeof text === "string" ? text : JSON.stringify(text);
 
     const locations = [...raw.matchAll(/schemaLocation="([^"]+)"/g)].map(m => m[1]);
-    const targets = [wsdlUrl, ...locations.map(loc => new URL(loc, wsdlUrl).toString())];
-    const inspected = [];
+    const inspected = [{ url: wsdlUrl, length: raw.length, schemaLocations: locations }];
 
-    for (const url of targets.slice(0, 20)) {
+    for (const loc of locations.slice(0, 30)) {
+      const url = new URL(loc, wsdlUrl).toString();
       try {
-        const body = url === wsdlUrl ? raw : await fetchJson(url, {
+        const body = await fetchJson(url, {
           method: "GET",
           headers: { "Accept": "application/xml,text/xml,*/*" }
         }, 0);
         const x = typeof body === "string" ? body : JSON.stringify(body);
         const markers = [
-          '<xs:element name="ArticleSearch"',
-          '<xsd:element name="ArticleSearch"',
-          'name="ArticleSearch"',
-          'ArticlePredicate',
+          '<xs:element name="ArticleBarcodeSearch"',
+          '<xsd:element name="ArticleBarcodeSearch"',
+          'name="ArticleBarcodeSearch"',
+          'ArticleBarcodePredicate',
+          'ArticleBarcodeSearchResponse',
           'ArticleBarcodes'
         ];
-        let pos = -1;
-        let marker = "";
+        let pos = -1, marker = "";
         for (const m of markers) {
           pos = x.indexOf(m);
           if (pos >= 0) { marker = m; break; }
         }
         inspected.push({ url, length: x.length, marker, pos });
-        if (pos >= 0 && (marker.includes("ArticleSearch") || marker === "ArticlePredicate" || marker === "ArticleBarcodes")) {
+        if (pos >= 0) {
           return JSON.stringify({
             inspected,
-            excerpt: x.slice(Math.max(0, pos - 5000), pos + 15000)
+            excerpt: x.slice(Math.max(0, pos - 7000), pos + 18000)
           });
         }
       } catch (e) {

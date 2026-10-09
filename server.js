@@ -427,6 +427,26 @@ async function getLegacyLoginSchema() {
   return null;
 }
 
+
+function safeShape(x, depth = 0) {
+  if (x == null) return x;
+  if (depth > 4) return typeof x;
+  if (Array.isArray(x)) return { type:"array", length:x.length, first:x.length ? safeShape(x[0], depth+1) : null };
+  if (typeof x !== "object") return typeof x === "string" ? { type:"string", length:x.length } : x;
+  const out = {};
+  for (const [k,v] of Object.entries(x)) out[k] = safeShape(v, depth+1);
+  return out;
+}
+
+async function debugLegacyLoginShape() {
+  try {
+    const data = await legacyCommonCall("Login", { userCode: USERNAME, userPassword: PASSWORD });
+    return safeShape(data);
+  } catch (e) {
+    return { error:String(e.message||e).slice(0,240), status:e.status||null };
+  }
+}
+
 async function modernSearchAdditionalBarcode(barcode) {
   const diagnostics = [];
 
@@ -787,7 +807,8 @@ function createMcpServer() {
           const predicateSchema = legacy.article ? null : await getArticleBarcodePredicateSchema();
           const stringCriteriaSchema = legacy.article ? null : await getStringCriteriaSchema();
           const loginSchema = legacy.article ? null : await getLegacyLoginSchema();
-          alternateBarcodeDiagnostics.push({ source: "legacy", diagnostics: legacy.diagnostics, predicateSchema, stringCriteriaSchema, loginSchema });
+          const loginShape = legacy.article ? null : await debugLegacyLoginShape();
+          alternateBarcodeDiagnostics.push({ source: "legacy", diagnostics: legacy.diagnostics, predicateSchema, stringCriteriaSchema, loginSchema, loginShape });
           if (legacy.article) {
             const legacyId = idOf(legacy.article);
             const canonical = legacyId ? articleCache.byId.get(legacyId) : null;

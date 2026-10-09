@@ -374,6 +374,34 @@ async function getArticleBarcodePredicateSchema() {
 
 async function modernSearchAdditionalBarcode(barcode) {
   const diagnostics = [];
+
+  const barcodeEndpoints = [
+    ["/v1/stock/articleBarcode/select", {}],
+    ["/v1/stock/articlebarcode/select", {}],
+    ["/v1/stock/article-barcode/select", {}]
+  ];
+
+  for (const [path, params] of barcodeEndpoints) {
+    try {
+      const raw = await apiGet(path, params);
+      const data = asArray(raw);
+      const record = findBarcodeRecord(raw, barcode);
+      const articleId = articleIdFromBarcodeRecord(record);
+      diagnostics.push({ path, count: data.length, foundRecord: !!record, articleId });
+      if (articleId) {
+        const canonical = articleCache.byId.get(articleId);
+        if (canonical) {
+          return {
+            article: { ...canonical, ArticleBarcodes: [...new Set([...articleBarcodes(canonical), barcode])] },
+            diagnostics
+          };
+        }
+      }
+    } catch (e) {
+      diagnostics.push({ path, status: e.status || null, error: String(e.message || e).slice(0, 180) });
+    }
+  }
+
   const candidates = [
     { barcode },
     { barcodes: [barcode] },
@@ -386,7 +414,7 @@ async function modernSearchAdditionalBarcode(barcode) {
   for (const params of candidates) {
     try {
       const data = asArray(await apiGet("/v1/stock/article/select", params));
-      diagnostics.push({ params: Object.keys(params), count: data.length });
+      diagnostics.push({ path: "/v1/stock/article/select", params: Object.keys(params), count: data.length });
       if (data.length > 0 && data.length < 100) {
         const exact = data.find(a =>
           String(a.Barcode ?? a.barcode ?? "").trim() === barcode ||
@@ -396,7 +424,7 @@ async function modernSearchAdditionalBarcode(barcode) {
         if (data.length === 1) return { article: data[0], diagnostics };
       }
     } catch (e) {
-      diagnostics.push({ params: Object.keys(params), status: e.status || null, error: String(e.message || e).slice(0, 180) });
+      diagnostics.push({ path: "/v1/stock/article/select", params: Object.keys(params), status: e.status || null, error: String(e.message || e).slice(0, 180) });
     }
   }
   return { article: null, diagnostics };

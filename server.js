@@ -965,7 +965,15 @@ function createMcpServer() {
     inputSchema: { dateFrom: z.string(), dateTo: z.string().optional(), documentIds: z.array(z.string()).optional(), articleIds: z.array(z.string()).optional(), limit: z.number().int().min(1).max(10000).optional() },
     annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: true }
   }, async ({ dateFrom, dateTo, documentIds = [], articleIds = [], limit = 3000 }) => {
-    const lots = await getLots(dateFrom, dateTo || dateFrom, { documentId: documentIds, lotArticleId: articleIds });
+    let lots = [];
+    if (articleIds.length > 20 && documentIds.length === 0) {
+      for (let i = 0; i < articleIds.length; i += 20) {
+        const part = await getLots(dateFrom, dateTo || dateFrom, { lotArticleId: articleIds.slice(i, i + 20) });
+        lots.push(...part);
+      }
+    } else {
+      lots = await getLots(dateFrom, dateTo || dateFrom, { documentId: documentIds, lotArticleId: articleIds });
+    }
     return jsonReply({ count: Math.min(lots.length, limit), total: lots.length, lots: lots.slice(0, limit) });
   });
 

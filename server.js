@@ -890,8 +890,24 @@ function createMcpServer() {
     inputSchema: { branchIds: z.array(z.string()).optional(), depotIds: z.array(z.string()).optional(), limit: z.number().int().min(1).max(20000).optional() },
     annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: true }
   }, async ({ branchIds = [], depotIds = [], limit = 10000 }) => {
+    await getArticles(false);
     const data = asArray(await apiGet("/v1/resume/currentBalance", { branchId: branchIds, depotId: depotIds }));
-    return jsonReply({ count: Math.min(data.length, limit), totalReturnedByProvecta: data.length, items: data.slice(0, limit) });
+    const enriched = data.map(row => {
+      const aid = idOf(row.Article ?? row.article ?? row.ArticleId ?? row.articleId);
+      const a = articleCache.byId.get(aid) || {};
+      return {
+        ...row,
+        ArticleInfo: {
+          id: aid,
+          barcode: a.Barcode ?? a.barcode ?? "",
+          code: a.Code ?? a.code ?? "",
+          name: a.Name ?? a.name ?? "",
+          price: a.Price ?? a.price ?? null,
+          group: a.Group?.Name ?? a.group?.name ?? a.Group ?? a.group ?? ""
+        }
+      };
+    });
+    return jsonReply({ count: Math.min(enriched.length, limit), totalReturnedByProvecta: enriched.length, items: enriched.slice(0, limit) });
   });
 
   mcp.registerTool("recent_documents", {

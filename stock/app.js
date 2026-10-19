@@ -119,35 +119,85 @@ async function loadDiffs(){
 }
 async function stopScan(){if(S.scanTimer)clearInterval(S.scanTimer);S.scanTimer=null;try{if(S.zxingControls)S.zxingControls.stop();}catch{}S.zxingControls=null;if(S.stream){S.stream.getTracks().forEach(t=>t.stop());S.stream=null;}$("video").classList.add("hidden");}
 async function startScan(){
-  await stopScan();msg($("scanInfo"),"Запускаю камеру…");
+  await stopScan();
+  msg($("scanInfo"),"Запускаю сканер…");
   try{
-    const stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:"environment"}}});S.stream=stream;$("video").srcObject=stream;await $("video").play();$("video").classList.remove("hidden");
-    if("BarcodeDetector" in window){
-      const det=new BarcodeDetector({formats:["ean_13","ean_8","code_128","upc_a","upc_e"]});
-      S.scanTimer=setInterval(async()=>{try{const codes=await det.detect($("video"));if(codes[0]?.rawValue){const v=codes[0].rawValue;await stopScan();tab("searchTab");$("search").value=v;search(v);}}catch{}},500);
-      msg($("scanInfo"),"Наведите камеру на штрихкод.","ok");
-    }else{
-      msg($("scanInfo"),"Подключаю сканер для iPhone…");
-      try{
-        if(!window.ZXingBrowser)throw new Error("ZXing не загружен");
-        const reader=new ZXingBrowser.BrowserMultiFormatReader();
-        if(S.stream){S.stream.getTracks().forEach(t=>t.stop());S.stream=null;}
-        $("video").srcObject=null;
-        S.zxingControls=await reader.decodeFromVideoDevice(undefined,$("video"),async(result,error,controls)=>{
-          if(result){
-            const v=result.getText();
+    $("video").classList.remove("hidden");
+
+    // На iPhone/Brave используем ZXing напрямую: встроенный BarcodeDetector
+    // может существовать, но фактически не распознавать EAN-коды.
+    if(window.ZXingBrowser){
+      const reader=new ZXingBrowser.BrowserMultiFormatReader();
+      const constraints={
+        audio:false,
+        video:{
+          facingMode:{ideal:"environment"},
+          width:{ideal:1920},
+          height:{ideal:1080},
+          frameRate:{ideal:30}
+        }
+      };
+      S.zxingControls=await reader.decodeFromConstraints(constraints,$("video"),async(result,error,controls)=>{
+        if(result){
+          const v=String(result.getText ? result.getText() : result.text || "").trim();
+          if(v){
+            msg($("scanInfo"),"Штрихкод найден: "+v,"ok");
             try{controls.stop();}catch{}
             S.zxingControls=null;
-            tab("searchTab");$("search").value=v;search(v);
+            setTimeout(()=>{
+              tab("searchTab");
+              $("search").value=v;
+              search(v);
+            },250);
           }
-        });
-        $("video").classList.remove("hidden");
-        msg($("scanInfo"),"Наведите камеру на штрихкод.","ok");
-      }catch(e){
-        msg($("scanInfo"),"Не удалось запустить сканер: "+(e?.message||"ошибка"),"bad");
-      }
+        }
+      });
+
+      try{
+        const track=$("video").srcObject?.getVideoTracks?.()[0];
+        const caps=track?.getCapabilities?.();
+        const adv={};
+        if(caps?.focusMode?.includes?.("continuous")) adv.focusMode="continuous";
+        if(caps?.zoom){
+          const z=Math.min(Math.max(1.5,caps.zoom.min||1),caps.zoom.max||1.5);
+          if(z>1) adv.zoom=z;
+        }
+        if(Object.keys(adv).length) await track.applyConstraints({advanced:[adv]});
+      }catch{}
+
+      msg($("scanInfo"),"Сканер активен. Держите штрихкод ровно в центре, примерно 15–25 см от камеры.","ok");
+      return;
     }
-  }catch(e){msg($("scanInfo"),"Нет доступа к камере: "+e.message,"bad");}
+
+    if("BarcodeDetector" in window){
+      const stream=await navigator.mediaDevices.getUserMedia({
+        video:{facingMode:{ideal:"environment"},width:{ideal:1920},height:{ideal:1080}}
+      });
+      S.stream=stream;
+      $("video").srcObject=stream;
+      await $("video").play();
+      const det=new BarcodeDetector({formats:["ean_13","ean_8","code_128","upc_a","upc_e"]});
+      S.scanTimer=setInterval(async()=>{
+        try{
+          const codes=await det.detect($("video"));
+          if(codes[0]?.rawValue){
+            const v=codes[0].rawValue;
+            await stopScan();
+            tab("searchTab");
+            $("search").value=v;
+            search(v);
+          }
+        }catch{}
+      },350);
+      msg($("scanInfo"),"Сканер активен. Наведите камеру на штрихкод.","ok");
+      return;
+    }
+
+    throw new Error("Модуль сканера не загружен");
+  }catch(e){
+    await stopScan();
+    msg($("scanInfo"),"Ошибка сканера: "+(e?.message||"не удалось запустить"),"bad");
+  }
 }
 $("loginBtn").addEventListener("click",login);$("searchBtn").addEventListener("click",()=>search());$("search").addEventListener("keydown",e=>{if(e.key==="Enter")search();});$("refreshBtn").addEventListener("click",refresh);
 $("startScan").addEventListener("click",startScan);$("stopScan").addEventListener("click",stopScan);$("reloadReq").addEventListener("click",loadRequests);$("reloadDiff").addEventListener("click",loadDiffs);

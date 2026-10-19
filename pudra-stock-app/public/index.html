@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#111111">
+<title>PUDRA STOCK</title>
+<style>
+:root{--pink:#ff2b8a;--bg:#f7f7f9;--card:#fff;--text:#151515;--muted:#6f7280;--line:#e8e8ee;--bad:#b42318;--good:#137333}
+*{box-sizing:border-box}body{margin:0;font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,sans-serif;background:var(--bg);color:var(--text)}
+header{position:sticky;top:0;z-index:10;background:#111;color:#fff;padding:14px 16px;display:flex;align-items:center;justify-content:space-between}
+.brand{font-weight:900;letter-spacing:.7px}.brand b{color:var(--pink)}.wrap{max-width:980px;margin:auto;padding:14px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:18px;padding:16px;margin-bottom:12px}.hidden{display:none!important}
+button,input,select,textarea{font:inherit}button{border:0;border-radius:14px;padding:13px 15px;font-weight:800;cursor:pointer}.primary{background:var(--pink);color:#fff}.dark{background:#111;color:#fff}.ghost{background:#fff;border:1px solid var(--line)}.danger{background:#fee4e2;color:var(--bad)}
+input,select,textarea{width:100%;padding:13px;border:1px solid #d7d7df;border-radius:12px;background:#fff;font-size:16px}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}.stack{display:grid;gap:10px}.row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}.grow{flex:1}
+.pill{display:inline-flex;padding:6px 9px;border-radius:999px;background:#f0f0f4;font-size:12px;font-weight:800}
+.stock{display:grid;grid-template-columns:1fr auto;gap:8px;padding:10px 0;border-bottom:1px solid var(--line)}.stock:last-child{border:0}.qty{font-weight:900}.zero{color:var(--bad)}
+.product{padding:12px 0;border-bottom:1px solid var(--line);cursor:pointer}.product:last-child{border:0}.name{font-weight:800}.muted{color:var(--muted);font-size:13px}
+.tabs{display:flex;gap:8px;overflow:auto;padding-bottom:8px}.tab{white-space:nowrap}.tab.active{background:#111;color:#fff}
+.notice{padding:10px 12px;border-radius:12px;background:#fff4cc;color:#5d4800;font-size:14px}.ok{background:#e8f5e9;color:#176b2c}.bad{background:#fdecea;color:var(--bad)}
+.route{font-weight:900;margin:14px 0 6px}.req{border-left:4px solid var(--pink);padding-left:10px;margin:10px 0}
+video{width:100%;border-radius:16px;background:#000;max-height:420px}
+@media(max-width:640px){.grid{grid-template-columns:1fr}.wrap{padding:10px}.card{border-radius:14px;padding:14px}}
+</style>
+</head>
+<body>
+<header><div class="brand">PUDRA <b>STOCK</b></div><div id="who" class="muted" style="color:#ddd"></div></header>
+<div class="wrap">
+  <section id="login" class="card">
+    <h2 style="margin-top:0">Вход</h2>
+    <div class="stack">
+      <input id="userName" placeholder="Имя сотрудника">
+      <select id="role"><option value="staff">Продавец</option><option value="admin">Администратор</option></select>
+      <input id="pin" type="password" inputmode="numeric" placeholder="PIN">
+      <button id="loginBtn" class="primary">Войти</button>
+      <div id="loginMsg"></div>
+    </div>
+  </section>
+
+  <main id="app" class="hidden">
+    <div class="tabs">
+      <button class="tab active ghost" data-tab="searchTab">Поиск</button>
+      <button class="tab ghost" data-tab="scanTab">Сканер</button>
+      <button class="tab ghost adminOnly" data-tab="adminTab">Заявки</button>
+      <button class="tab ghost adminOnly" data-tab="diffTab">Расхождения</button>
+    </div>
+
+    <section id="searchTab" class="tabPanel">
+      <div class="card">
+        <div class="row">
+          <input id="search" class="grow" placeholder="Название, код или штрихкод">
+          <button id="searchBtn" class="dark">Найти</button>
+          <button id="refreshBtn" class="ghost">↻</button>
+        </div>
+        <div id="searchMsg" class="muted" style="margin-top:8px"></div>
+        <div id="results"></div>
+      </div>
+      <div id="productCard" class="card hidden"></div>
+    </section>
+
+    <section id="scanTab" class="tabPanel hidden">
+      <div class="card">
+        <div id="scanInfo" class="notice">Нажмите «Запустить камеру» и наведите на штрихкод.</div>
+        <video id="video" class="hidden" playsinline muted></video>
+        <div class="row" style="margin-top:10px">
+          <button id="startScan" class="primary">Запустить камеру</button>
+          <button id="stopScan" class="ghost">Остановить</button>
+        </div>
+      </div>
+    </section>
+
+    <section id="adminTab" class="tabPanel hidden adminOnly">
+      <div class="card">
+        <div class="row"><h3 class="grow" style="margin:0">Все заявки</h3><button id="reloadReq" class="ghost">Обновить</button></div>
+        <div id="requests"></div>
+      </div>
+    </section>
+
+    <section id="diffTab" class="tabPanel hidden adminOnly">
+      <div class="card">
+        <div class="row"><h3 class="grow" style="margin:0">Расхождения остатков</h3><button id="reloadDiff" class="ghost">Обновить</button></div>
+        <div id="diffs"></div>
+      </div>
+    </section>
+  </main>
+</div>
+<script src="/static/app.js"></script>
+</body>
+</html>

@@ -9,7 +9,7 @@ function tab(id){document.querySelectorAll(".tabPanel").forEach(x=>x.classList.a
 async function login(){
   S.user=$("userName").value.trim();S.role=$("role").value;S.pin=$("pin").value;
   if(!S.user||!S.pin)return msg($("loginMsg"),"Введите имя и PIN","bad");
-  try{const m=await api("/api/meta");S.depots=m.depots;$("login").classList.add("hidden");$("app").classList.remove("hidden");$("who").textContent=S.user+(S.role==="admin"?" · админ":"");document.querySelectorAll(".adminOnly").forEach(x=>x.classList.toggle("hidden",S.role!=="admin"));msg($("loginMsg"),"");}
+  try{const m=await api("/stock/api/meta");S.depots=m.depots;$("login").classList.add("hidden");$("app").classList.remove("hidden");$("who").textContent=S.user+(S.role==="admin"?" · админ":"");document.querySelectorAll(".adminOnly").forEach(x=>x.classList.toggle("hidden",S.role!=="admin"));msg($("loginMsg"),"");}
   catch(e){msg($("loginMsg"),e.message,"bad");}
 }
 function stockRows(p){return p.stocks.map(x=>'<div class="stock"><span>'+esc(x.depotName)+'</span><span class="qty '+(Number(x.quantity)<=0?"zero":"")+'">'+esc(x.quantity)+'</span></div>').join("");}
@@ -30,7 +30,7 @@ function showMoveForm(){
 }
 async function sendMove(){
   try{
-    const d=await api("/api/transfers",{method:"POST",body:JSON.stringify({productId:S.product.id,barcode:S.product.barcode,fromDepotId:$("from").value,toDepotId:$("to").value,quantity:Number($("qty").value)})});
+    const d=await api("/stock/api/transfers",{method:"POST",body:JSON.stringify({productId:S.product.id,barcode:S.product.barcode,fromDepotId:$("from").value,toDepotId:$("to").value,quantity:Number($("qty").value)})});
     msg($("moveMsg"),"Заявка №"+d.request.id+" отправлена администратору.","ok");
   }catch(e){msg($("moveMsg"),e.message,"bad");}
 }
@@ -40,7 +40,7 @@ function showDiffForm(){
 }
 async function sendDiff(){
   try{
-    const d=await api("/api/discrepancies",{method:"POST",body:JSON.stringify({productId:S.product.id,barcode:S.product.barcode,depotId:$("diffDepot").value,actualQty:Number($("actual").value),comment:$("comment").value})});
+    const d=await api("/stock/api/discrepancies",{method:"POST",body:JSON.stringify({productId:S.product.id,barcode:S.product.barcode,depotId:$("diffDepot").value,actualQty:Number($("actual").value),comment:$("comment").value})});
     const x=d.discrepancy;msg($("diffMsg"),"Отправлено. Разница: "+x.difference+" шт.","ok");
   }catch(e){msg($("diffMsg"),e.message,"bad");}
 }
@@ -48,25 +48,25 @@ async function search(q){
   q=(q??$("search").value).trim();if(!q)return;
   msg($("searchMsg"),"Ищу…");$("results").innerHTML="";
   try{
-    const d=await api("/api/search?q="+encodeURIComponent(q));msg($("searchMsg"),d.products.length?"Найдено: "+d.products.length:"Ничего не найдено");
+    const d=await api("/stock/api/search?q="+encodeURIComponent(q));msg($("searchMsg"),d.products.length?"Найдено: "+d.products.length:"Ничего не найдено");
     if(d.products.length===1){showProduct(d.products[0]);return;}
     $("results").innerHTML=d.products.map((p,i)=>'<div class="product" data-i="'+i+'"><div class="name">'+esc(p.name)+'</div><div class="muted">'+esc(p.barcode||"—")+' · '+esc(p.price)+' MDL</div></div>').join("");
     document.querySelectorAll(".product[data-i]").forEach(el=>el.addEventListener("click",()=>showProduct(d.products[Number(el.dataset.i)])));
   }catch(e){msg($("searchMsg"),e.message,"bad");}
 }
-async function refresh(){try{msg($("searchMsg"),"Обновляю остатки…");await api("/api/refresh",{method:"POST",body:"{}"});msg($("searchMsg"),"Остатки обновлены","ok");if(S.product)await search(S.product.barcode||S.product.name);}catch(e){msg($("searchMsg"),e.message,"bad");}}
+async function refresh(){try{msg($("searchMsg"),"Обновляю остатки…");await api("/stock/api/refresh",{method:"POST",body:"{}"});msg($("searchMsg"),"Остатки обновлены","ok");if(S.product)await search(S.product.barcode||S.product.name);}catch(e){msg($("searchMsg"),e.message,"bad");}}
 function statusRu(s){return ({NEW:"Новая",APPROVED:"Подтверждена",PICKING:"Собирается",SENT:"Отправлена",RECEIVED:"Получена",CLOSED:"Закрыта",REJECTED:"Отклонена"})[s]||s;}
 async function loadRequests(){
   try{
-    const d=await api("/api/transfers");const groups={};
+    const d=await api("/stock/api/transfers");const groups={};
     d.items.forEach(x=>{const k=x.from_depot_name+" → "+x.to_depot_name;(groups[k]||(groups[k]=[])).push(x);});
     $("requests").innerHTML=Object.keys(groups).length?Object.entries(groups).map(([route,items])=>'<div class="route">'+esc(route)+' <span class="pill">'+items.length+'</span></div>'+items.map(x=>'<div class="req"><div class="name">'+esc(x.product_name)+' — '+esc(x.quantity)+' шт.</div><div class="muted">'+esc(x.employee)+' · '+new Date(x.created_at).toLocaleString()+' · '+statusRu(x.status)+'</div><div class="row" style="margin-top:6px">'+["APPROVED","PICKING","SENT","RECEIVED","CLOSED","REJECTED"].map(st=>'<button class="ghost st" data-id="'+x.id+'" data-st="'+st+'" style="padding:7px 9px">'+statusRu(st)+'</button>').join("")+'</div></div>').join("")).join(""):'<div class="muted">Заявок нет</div>';
-    document.querySelectorAll(".st").forEach(b=>b.addEventListener("click",async()=>{await api("/api/transfers/"+b.dataset.id,{method:"PATCH",body:JSON.stringify({status:b.dataset.st})});loadRequests();}));
+    document.querySelectorAll(".st").forEach(b=>b.addEventListener("click",async()=>{await api("/stock/api/transfers/"+b.dataset.id,{method:"PATCH",body:JSON.stringify({status:b.dataset.st})});loadRequests();}));
   }catch(e){$("requests").innerHTML='<div class="notice bad">'+esc(e.message)+'</div>';}
 }
 async function loadDiffs(){
   try{
-    const d=await api("/api/discrepancies");$("diffs").innerHTML=d.items.length?d.items.map(x=>'<div class="req"><div class="name">'+esc(x.product_name)+'</div><div>'+esc(x.depot_name)+': Provecta <b>'+esc(x.system_qty)+'</b> → факт <b>'+esc(x.actual_qty)+'</b> · разница <b>'+(Number(x.difference)>0?"+":"")+esc(x.difference)+'</b></div><div class="muted">'+esc(x.employee)+' · '+new Date(x.created_at).toLocaleString()+(x.comment?' · '+esc(x.comment):'')+'</div></div>').join(""):'<div class="muted">Расхождений нет</div>';
+    const d=await api("/stock/api/discrepancies");$("diffs").innerHTML=d.items.length?d.items.map(x=>'<div class="req"><div class="name">'+esc(x.product_name)+'</div><div>'+esc(x.depot_name)+': Provecta <b>'+esc(x.system_qty)+'</b> → факт <b>'+esc(x.actual_qty)+'</b> · разница <b>'+(Number(x.difference)>0?"+":"")+esc(x.difference)+'</b></div><div class="muted">'+esc(x.employee)+' · '+new Date(x.created_at).toLocaleString()+(x.comment?' · '+esc(x.comment):'')+'</div></div>').join(""):'<div class="muted">Расхождений нет</div>';
   }catch(e){$("diffs").innerHTML='<div class="notice bad">'+esc(e.message)+'</div>';}
 }
 async function stopScan(){if(S.scanTimer)clearInterval(S.scanTimer);S.scanTimer=null;if(S.stream){S.stream.getTracks().forEach(t=>t.stop());S.stream=null;}$("video").classList.add("hidden");}

@@ -2,7 +2,7 @@
 const S={user:"",role:"staff",pin:"",depots:[],product:null,stream:null,scanTimer:null,watchTimer:null,lastTransferId:0,lastDiffId:0};
 const $=id=>document.getElementById(id);
 const esc=s=>String(s??"").replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[m]));
-function headers(){return {"content-type":"application/json","x-pudra-pin":S.pin,"x-pudra-user":S.user,"x-pudra-role":S.role};}
+function headers(){return {"content-type":"application/json","x-pudra-pin":S.pin,"x-pudra-user":encodeURIComponent(S.user),"x-pudra-role":S.role};}
 async function api(url,opt={}){
   let last;
   for(let i=0;i<2;i++){

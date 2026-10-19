@@ -1,0 +1,121 @@
+import fs from "node:fs/promises";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+
+export function createStockApp(deps) {
+  const { getArticles, getDepots, getCachedStocks, refreshStockCache, simpleDepot, simpleArticle, articleBarcodes, idOf } = deps;
+  const ADMIN_PIN = process.env.STOCK_ADMIN_PIN || "2468";
+  const STAFF_PIN = process.env.STOCK_STAFF_PIN || "1357";
+  const transfers = [];
+  const discrepancies = [];
+
+  const sendJson=(res,status,data)=>{res.writeHead(status,{"content-type":"application/json; charset=utf-8","cache-control":"no-store"});res.end(JSON.stringify(data));};
+  const esc=s=>String(s??"");
+  const authInfo=req=>{
+    const pin=String(req.headers["x-pudra-pin"]||"");
+    const user=String(req.headers["x-pudra-user"]||"").trim()||"Сотрудник";
+    const role=String(req.headers["x-pudra-role"]||"staff");
+    const admin=role==="admin"&&pin===ADMIN_PIN;
+    const ok=admin||pin===STAFF_PIN;
+    return {ok,admin,user,role:admin?"admin":"staff"};
+  };
+  const readBody=async req=>{const xs=[];let n=0;for await(const c of req){n+=c.length;if(n>256000)throw new Error("Body too large");xs.push(c);}const raw=Buffer.concat(xs).toString("utf8");return raw?JSON.parse(raw):{};};
+  const depotName=(ds,id)=>ds.find(d=>d.id===id)?.name||id;
+  const isTopFace=n=>/TOP\s*FACE|TOPFACE/i.test(n||"");
+  const isHairElastic=n=>/ELASTIC|РЕЗИН|REZIN/i.test(n||"");
+
+  async function catalogs(){
+    const [rawArticles,rawDepots]=await Promise.all([getArticles(false),getDepots(false)]);
+    return {rawArticles,ds:rawDepots.map(simpleDepot).filter(d=>d.id)};
+  }
+  function stocksFor(a,ds){
+    const aid=idOf(a);
+    const cached=getCachedStocks(aid)||[];
+    const m=new Map(cached.map(x=>[x.id,x]));
+    return ds.map(d=>({depotId:d.id,depotName:d.name,quantity:Number(m.get(d.id)?.quantity||0)}));
+  }
+  function shape(a,ds){
+    const x=simpleArticle(a);
+    return {...x,stocks:stocksFor(a,ds)};
+  }
+  async function search(q){
+    const s=String(q||"").trim().toLowerCase();
+    if(!s)return [];
+    const {rawArticles,ds}=await catalogs();
+    const exact=/^\d{8,14}$/.test(s);
+    const matched=rawArticles.filter(a=>{
+      const vals=[a.Name,a.name,a.Barcode,a.barcode,a.Code,a.code,...articleBarcodes(a)].map(v=>String(v||"").toLowerCase());
+      return exact?vals.includes(s):vals.some(v=>v.includes(s));
+    }).slice(0,exact?1:50);
+    return matched.map(a=>shape(a,ds));
+  }
+  async function findProduct(productId,barcode){
+    const {rawArticles,ds}=await catalogs();
+    let a=rawArticles.find(x=>idOf(x)===String(productId||""));
+    if(!a&&barcode){
+      const bc=String(barcode);
+      a=rawArticles.find(x=>String(x.Barcode??x.barcode??"")===bc||articleBarcodes(x).includes(bc));
+    }
+    return a?shape(a,ds):null;
+  }
+  function transferError(p,ds,fromId,toId,qty){
+    if(!fromId||!toId||fromId===toId)return "Выберите разные точки ОТКУДА и КУДА.";
+    if(!Number.isFinite(qty)||qty<=0)return "Количество должно быть больше 0.";
+    const from=depotName(ds,fromId), to=depotName(ds,toId);
+    const available=Number(p.stocks.find(x=>x.depotId===fromId)?.quantity||0);
+    if(available<=0)return `На ${from} остаток 0 или минус. Заявка запрещена.`;
+    if(qty>available)return `На ${from} доступно только ${available} шт.`;
+    if(isTopFace(p.name)&&/ORHEI|ОРГЕЕВ/i.test(to))return "TOP FACE нельзя направлять в Orhei.";
+    if(isHairElastic(p.name)&&(/MAFIA/i.test(to)||/^PUDRA BALTI$/i.test(to)))return "Резинки нельзя направлять в Mafia.";
+    return "";
+  }
+
+  return async function handleStock(req,res,url){
+    if(req.method==="GET"&&(url.pathname==="/stock"||url.pathname==="/stock/")){
+      const data=await fs.readFile(path.join(__dirname,"stock","index.html"));res.writeHead(200,{"content-type":"text/html; charset=utf-8","cache-control":"no-store"});res.end(data);return true;
+    }
+    if(req.method==="GET"&&url.pathname==="/stock/app.js"){
+      const data=await fs.readFile(path.join(__dirname,"stock","app.js"));res.writeHead(200,{"content-type":"application/javascript; charset=utf-8","cache-control":"no-store"});res.end(data);return true;
+    }
+    if(!url.pathname.startsWith("/stock/api/"))return false;
+    const a=authInfo(req); if(!a.ok){sendJson(res,401,{error:"Неверный PIN"});return true;}
+    if(req.method==="GET"&&url.pathname==="/stock/api/meta"){
+      const {ds}=await catalogs();sendJson(res,200,{depots:ds,user:a.user,role:a.role});return true;
+    }
+    if(req.method==="GET"&&url.pathname==="/stock/api/search"){
+      const products=await search(url.searchParams.get("q")||"");sendJson(res,200,{products});return true;
+    }
+    if(req.method==="POST"&&url.pathname==="/stock/api/refresh"){
+      await refreshStockCache(true);sendJson(res,200,{ok:true});return true;
+    }
+    if(req.method==="POST"&&url.pathname==="/stock/api/transfers"){
+      const b=await readBody(req);const p=await findProduct(b.productId,b.barcode);if(!p){sendJson(res,404,{error:"Товар не найден"});return true;}
+      const {ds}=await catalogs();const qty=Math.trunc(Number(b.quantity));const err=transferError(p,ds,b.fromDepotId,b.toDepotId,qty);if(err){sendJson(res,400,{error:err});return true;}
+      const dupe=transfers.find(x=>x.product_id===p.id&&x.from_depot_id===b.fromDepotId&&x.to_depot_id===b.toDepotId&&["NEW","APPROVED","PICKING","SENT"].includes(x.status));
+      if(dupe){sendJson(res,409,{error:`Уже есть активная заявка №${dupe.id} по этому товару и направлению.`});return true;}
+      const row={id:Date.now(),created_at:new Date().toISOString(),employee:a.user,product_id:p.id,barcode:p.barcode,product_name:p.name,from_depot_id:b.fromDepotId,from_depot_name:depotName(ds,b.fromDepotId),to_depot_id:b.toDepotId,to_depot_name:depotName(ds,b.toDepotId),quantity:qty,status:"NEW"};
+      transfers.unshift(row);sendJson(res,201,{ok:true,request:row});return true;
+    }
+    if(req.method==="GET"&&url.pathname==="/stock/api/transfers"){
+      if(!a.admin){sendJson(res,403,{error:"Только администратор"});return true;}sendJson(res,200,{items:transfers});return true;
+    }
+    if(req.method==="PATCH"&&/^\/stock\/api\/transfers\/\d+$/.test(url.pathname)){
+      if(!a.admin){sendJson(res,403,{error:"Только администратор"});return true;}const b=await readBody(req);const allowed=["NEW","APPROVED","PICKING","SENT","RECEIVED","CLOSED","REJECTED"];if(!allowed.includes(b.status)){sendJson(res,400,{error:"Неверный статус"});return true;}
+      const id=url.pathname.split("/").pop(),row=transfers.find(x=>String(x.id)===id);if(row)row.status=b.status;sendJson(res,200,{item:row});return true;
+    }
+    if(req.method==="POST"&&url.pathname==="/stock/api/discrepancies"){
+      const b=await readBody(req),p=await findProduct(b.productId,b.barcode);if(!p){sendJson(res,404,{error:"Товар не найден"});return true;}
+      const {ds}=await catalogs();const systemQty=Number(p.stocks.find(x=>x.depotId===b.depotId)?.quantity||0),actualQty=Number(b.actualQty);
+      if(!Number.isFinite(actualQty)||actualQty<0){sendJson(res,400,{error:"Укажите фактическое количество 0 или больше"});return true;}
+      if(actualQty===systemQty){sendJson(res,400,{error:"Расхождения нет: количество совпадает с Provecta"});return true;}
+      const row={id:Date.now(),created_at:new Date().toISOString(),employee:a.user,product_id:p.id,barcode:p.barcode,product_name:p.name,depot_id:b.depotId,depot_name:depotName(ds,b.depotId),system_qty:systemQty,actual_qty:actualQty,difference:actualQty-systemQty,comment:esc(b.comment),status:"NEW"};
+      discrepancies.unshift(row);sendJson(res,201,{ok:true,discrepancy:row});return true;
+    }
+    if(req.method==="GET"&&url.pathname==="/stock/api/discrepancies"){
+      if(!a.admin){sendJson(res,403,{error:"Только администратор"});return true;}sendJson(res,200,{items:discrepancies});return true;
+    }
+    sendJson(res,404,{error:"Not found"});return true;
+  };
+}

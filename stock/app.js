@@ -117,6 +117,15 @@ async function loadDiffs(){
     const d=await api("/stock/api/discrepancies");$("diffs").innerHTML=d.items.length?d.items.map(x=>'<div class="req"><div class="name">'+esc(x.product_name)+'</div><div>'+esc(x.depot_name)+': Provecta <b>'+esc(x.system_qty)+'</b> → факт <b>'+esc(x.actual_qty)+'</b> · разница <b>'+(Number(x.difference)>0?"+":"")+esc(x.difference)+'</b></div><div class="muted">'+esc(x.employee)+' · '+new Date(x.created_at).toLocaleString()+(x.comment?' · '+esc(x.comment):'')+'</div></div>').join(""):'<div class="muted">Расхождений нет</div>';
   }catch(e){$("diffs").innerHTML='<div class="notice bad">'+esc(e.message)+'</div>';}
 }
+function showScanMoveForm(){
+  $("scanMoveBox").innerHTML='<div class="card" style="margin:0"><div class="grid"><label>ОТКУДА<select id="scanFrom">'+optionList()+'</select></label><label>КУДА<select id="scanTo">'+optionList()+'</select></label></div><label>Количество<input id="scanQty" type="number" min="1" step="1" value="1"></label><button id="scanSendMove" class="primary" style="width:100%;margin-top:10px">Отправить заявку</button><div id="scanMoveMsg" style="margin-top:8px"></div></div>';
+  $("scanSendMove").addEventListener("click",async()=>{
+    try{
+      const d=await api("/stock/api/transfers",{method:"POST",body:JSON.stringify({productId:S.product.id,barcode:S.product.barcode,fromDepotId:$("scanFrom").value,toDepotId:$("scanTo").value,quantity:Number($("scanQty").value)})});
+      msg($("scanMoveMsg"),"Заявка №"+d.request.id+" отправлена.","ok");
+    }catch(e){msg($("scanMoveMsg"),e.message,"bad");}
+  });
+}
 async function stopScan(){
   if(S.scanTimer)clearInterval(S.scanTimer);
   S.scanTimer=null;
@@ -147,8 +156,9 @@ async function handleScannedCode(v){
       $("scanResult").innerHTML=
         '<div class="row"><div class="grow"><div class="name" style="font-size:20px">'+esc(p.name)+'</div><div class="muted">Штрихкод: '+esc(p.barcode||v)+' · Цена: '+esc(p.price)+' MDL</div></div></div>'+
         '<h4>Остатки</h4>'+scanStockRows(p)+
-        '<button id="scanNext" class="primary" style="width:100%;margin-top:14px">Дальше</button>';
+        '<div class="grid" style="margin-top:14px"><button id="scanMove" class="ghost">Запросить перемещение</button><button id="scanNext" class="primary">Дальше</button></div><div id="scanMoveBox" style="margin-top:10px"></div>';
     }
+    if($("scanMove"))$("scanMove").addEventListener("click",showScanMoveForm);
     $("scanNext").addEventListener("click",()=>{
       $("scanResult").classList.add("hidden");
       $("scanResult").innerHTML="";

@@ -155,6 +155,15 @@ async function loadDiffs(){
     const d=await api("/stock/api/discrepancies");$("diffs").innerHTML=d.items.length?d.items.map(x=>'<div class="req"><div class="name">'+esc(x.product_name)+'</div><div>'+esc(x.depot_name)+': Provecta <b>'+esc(x.system_qty)+'</b> → факт <b>'+esc(x.actual_qty)+'</b> · разница <b>'+(Number(x.difference)>0?"+":"")+esc(x.difference)+'</b></div><div class="muted">'+esc(x.employee)+' · '+new Date(x.created_at).toLocaleString()+(x.comment?' · '+esc(x.comment):'')+'</div></div>').join(""):'<div class="muted">Расхождений нет</div>';
   }catch(e){$("diffs").innerHTML='<div class="notice bad">'+esc(e.message)+'</div>';}
 }
+function showScanDiffForm(){
+  $("scanDiffBox").innerHTML='<div class="card" style="margin:0"><label>Магазин<select id="scanDiffDepot">'+optionList()+'</select></label><label>Фактически посчитано<input id="scanActual" type="number" min="0" step="1"></label><label>Комментарий<textarea id="scanComment" rows="2" placeholder="Необязательно"></textarea></label><button id="scanSendDiff" class="primary" style="width:100%;margin-top:10px">Сообщить администратору</button><div id="scanDiffMsg" style="margin-top:8px"></div></div>';
+  $("scanSendDiff").addEventListener("click",async()=>{
+    try{
+      const d=await api("/stock/api/discrepancies",{method:"POST",body:JSON.stringify({productId:S.product.id,barcode:S.product.barcode,depotId:$("scanDiffDepot").value,actualQty:Number($("scanActual").value),comment:$("scanComment").value})});
+      msg($("scanDiffMsg"),"Отправлено. Разница: "+d.discrepancy.difference+" шт.","ok");
+    }catch(e){msg($("scanDiffMsg"),e.message,"bad");}
+  });
+}
 function showScanMoveForm(){
   $("scanMoveBox").innerHTML='<div class="card" style="margin:0"><div class="grid"><label>ОТКУДА<select id="scanFrom">'+optionList()+'</select></label><label>КУДА<select id="scanTo">'+optionList()+'</select></label></div><label>Количество<input id="scanQty" type="number" min="1" step="1" value="1"></label><button id="scanSendMove" class="primary" style="width:100%;margin-top:10px">Отправить заявку</button><div id="scanMoveMsg" style="margin-top:8px"></div></div>';
   $("scanSendMove").addEventListener("click",async()=>{
@@ -194,9 +203,10 @@ async function handleScannedCode(v){
       $("scanResult").innerHTML=
         '<div class="row"><div class="grow"><div class="name" style="font-size:20px">'+esc(p.name)+'</div><div class="muted">Штрихкод: '+esc(p.barcode||v)+' · Цена: '+esc(p.price)+' MDL</div></div></div>'+
         '<h4>Остатки</h4>'+scanStockRows(p)+
-        '<div class="grid" style="margin-top:14px"><button id="scanMove" class="ghost">Запросить перемещение</button><button id="scanNext" class="primary">Дальше</button></div><div id="scanMoveBox" style="margin-top:10px"></div>';
+        '<div class="grid" style="margin-top:14px"><button id="scanMove" class="ghost">Запросить перемещение</button><button id="scanDiff" class="ghost">Есть расхождение</button></div><button id="scanNext" class="primary" style="width:100%;margin-top:10px">Дальше</button><div id="scanMoveBox" style="margin-top:10px"></div><div id="scanDiffBox" style="margin-top:10px"></div>';
     }
     if($("scanMove"))$("scanMove").addEventListener("click",showScanMoveForm);
+    if($("scanDiff"))$("scanDiff").addEventListener("click",showScanDiffForm);
     $("scanNext").addEventListener("click",()=>{
       $("scanResult").classList.add("hidden");
       $("scanResult").innerHTML="";

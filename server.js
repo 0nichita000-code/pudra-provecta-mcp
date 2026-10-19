@@ -639,6 +639,7 @@ async function getArticles(force = false) {
     if (bc) byBarcode.set(bc, a);
   }
   articleCache = { at: Date.now(), items, byId, byBarcode };
+  if (process.env.DEBUG_ARTICLE_SCHEMA === "1") { const sample = items.find(a => /OLLIN/i.test(String(a.Name ?? a.name ?? ""))) || items[0]; console.log("ARTICLE_SCHEMA_SAMPLE", JSON.stringify(sample)); }
   return items;
 }
 

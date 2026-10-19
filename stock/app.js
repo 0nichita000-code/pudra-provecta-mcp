@@ -1,5 +1,5 @@
 (()=>{
-const S={user:"",role:"staff",pin:"",depots:[],product:null,stream:null,scanTimer:null,watchTimer:null,lastTransferId:0,lastDiffId:0,zxingControls:null,scanLocked:false,lastScanned:""};
+const S={user:"",role:"staff",pin:"",depots:[],product:null,stream:null,scanTimer:null,watchTimer:null,lastTransferId:0,lastDiffId:0,zxingControls:null,scanLocked:false,lastScanned:"",cameraIds:[],cameraIndex:0};
 const $=id=>document.getElementById(id);
 const esc=s=>String(s??"").replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[m]));
 function headers(){return {"content-type":"application/json","x-pudra-pin":S.pin,"x-pudra-user":encodeURIComponent(S.user),"x-pudra-role":S.role};}
@@ -179,12 +179,31 @@ async function startScan(){
 
     if(window.ZXingBrowser){
       const reader=new ZXingBrowser.BrowserMultiFormatReader();
+
+      if(!S.cameraIds.length){
+        try{
+          const probe=await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:"environment"}},audio:false});
+          probe.getTracks().forEach(t=>t.stop());
+          const devs=(await navigator.mediaDevices.enumerateDevices()).filter(d=>d.kind==="videoinput");
+          const score=d=>{
+            const n=(d.label||"").toLowerCase();
+            let s=0;
+            if(/back|rear|environment|main/.test(n))s+=50;
+            if(/front|user|selfie/.test(n))s-=100;
+            if(/ultra|macro|tele/.test(n))s-=20;
+            return s;
+          };
+          S.cameraIds=devs.sort((a,b)=>score(b)-score(a)).map(d=>d.deviceId);
+        }catch{}
+      }
+
+      const chosen=S.cameraIds[S.cameraIndex]||null;
       const constraints={
         audio:false,
         video:{
-          facingMode:{ideal:"environment"},
-          width:{ideal:1920},
-          height:{ideal:1080},
+          ...(chosen?{deviceId:{exact:chosen}}:{facingMode:{ideal:"environment"}}),
+          width:{ideal:3840,min:1280},
+          height:{ideal:2160,min:720},
           frameRate:{ideal:30}
         }
       };
@@ -200,10 +219,6 @@ async function startScan(){
         const caps=track?.getCapabilities?.();
         const adv={};
         if(caps?.focusMode?.includes?.("continuous"))adv.focusMode="continuous";
-        if(caps?.zoom){
-          const z=Math.min(Math.max(1.5,caps.zoom.min||1),caps.zoom.max||1.5);
-          if(z>1)adv.zoom=z;
-        }
         if(Object.keys(adv).length)await track.applyConstraints({advanced:[adv]});
       }catch{}
       msg($("scanInfo"),"Камера включена. После результата нажимайте «Дальше».","ok");
@@ -234,7 +249,25 @@ async function startScan(){
     msg($("scanInfo"),"Ошибка сканера: "+(e?.message||"не удалось запустить"),"bad");
   }
 }
+async function switchCamera(){
+  try{
+    if(!S.cameraIds.length){
+      const devs=(await navigator.mediaDevices.enumerateDevices()).filter(d=>d.kind==="videoinput");
+      S.cameraIds=devs.map(d=>d.deviceId);
+    }
+    if(S.cameraIds.length<2){
+      msg($("scanInfo"),"На телефоне доступна только одна камера для браузера.","bad");
+      return;
+    }
+    S.cameraIndex=(S.cameraIndex+1)%S.cameraIds.length;
+    await stopScan();
+    await startScan();
+  }catch(e){
+    msg($("scanInfo"),"Не удалось сменить камеру: "+(e?.message||"ошибка"),"bad");
+  }
+}
+
 $("loginBtn").addEventListener("click",login);$("searchBtn").addEventListener("click",()=>search());$("search").addEventListener("keydown",e=>{if(e.key==="Enter")search();});$("refreshBtn").addEventListener("click",refresh);
-$("startScan").addEventListener("click",startScan);$("stopScan").addEventListener("click",stopScan);$("reloadReq").addEventListener("click",loadRequests);$("reloadDiff").addEventListener("click",loadDiffs);
+$("startScan").addEventListener("click",startScan);$("switchCamera").addEventListener("click",switchCamera);$("stopScan").addEventListener("click",stopScan);$("reloadReq").addEventListener("click",loadRequests);$("reloadDiff").addEventListener("click",loadDiffs);
 document.querySelectorAll(".tab").forEach(b=>b.addEventListener("click",()=>tab(b.dataset.tab)));
 })();

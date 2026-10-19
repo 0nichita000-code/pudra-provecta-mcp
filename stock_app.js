@@ -15,7 +15,7 @@ export function createStockApp(deps) {
   const esc=s=>String(s??"");
   const authInfo=req=>{
     const pin=String(req.headers["x-pudra-pin"]||"");
-    const user=String(req.headers["x-pudra-user"]||"").trim()||"Сотрудник";
+    let user=String(req.headers["x-pudra-user"]||"").trim(); try{user=decodeURIComponent(user);}catch{} user=user||"Сотрудник";
     const role=String(req.headers["x-pudra-role"]||"staff");
     const admin=role==="admin"&&pin===ADMIN_PIN;
     const ok=admin||pin===STAFF_PIN;

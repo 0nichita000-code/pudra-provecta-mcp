@@ -3,6 +3,7 @@ import crypto from "node:crypto";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { z } from "zod";
+import { createStockApp } from "./stock_app.js";
 
 const MCP_PATH = "/mcp";
 const PORT = Number(process.env.PORT || 8080);
@@ -1078,8 +1079,15 @@ function oauthChallenge(req) {
   return `Bearer resource_metadata="${base}/.well-known/oauth-protected-resource", scope="${OAUTH_SCOPE}"`;
 }
 
+const stockApp = createStockApp({
+  getArticles, getDepots, getCachedStocks, refreshStockCache,
+  simpleDepot, simpleArticle, articleBarcodes, idOf
+});
+
 const httpServer = createServer(async (req, res) => {
   const url = new URL(req.url || "/", `http://${req.headers.host || "localhost"}`);
+
+  if (await stockApp(req, res, url)) return;
 
   if (req.method === "GET" && url.pathname === "/") {
     res.writeHead(200, { "content-type": "application/json" });

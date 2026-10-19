@@ -42,6 +42,7 @@ video{width:100%;border-radius:16px;background:#000;max-height:420px}
     <div class="tabs">
       <button class="tab active ghost" data-tab="searchTab">Поиск</button>
       <button class="tab ghost" data-tab="scanTab">Сканер</button>
+      <button class="tab ghost" data-tab="inventoryTab">Все остатки</button>
       <button class="tab ghost adminOnly" data-tab="adminTab">Заявки</button>
       <button class="tab ghost adminOnly" data-tab="diffTab">Расхождения</button>
     </div>
@@ -69,6 +70,19 @@ video{width:100%;border-radius:16px;background:#000;max-height:420px}
           <button id="switchCamera" class="ghost">Сменить камеру</button>
           <button id="stopScan" class="ghost">Остановить</button>
         </div>
+      </div>
+    </section>
+
+    <section id="inventoryTab" class="tabPanel hidden">
+      <div class="card">
+        <div class="row">
+          <input id="invSearch" class="grow" placeholder="Поиск по названию, коду или штрихкоду">
+          <select id="invGroup" style="max-width:280px"><option value="">Все группы</option></select>
+          <button id="invReload" class="ghost">Обновить</button>
+        </div>
+        <div id="invInfo" class="muted" style="margin-top:8px"></div>
+        <div id="inventoryList"></div>
+        <button id="invMore" class="ghost hidden" style="width:100%;margin-top:12px">Показать ещё</button>
       </div>
     </section>
 

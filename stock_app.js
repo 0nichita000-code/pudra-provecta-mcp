@@ -44,9 +44,32 @@ export function createStockApp(deps) {
     const m=new Map(cached.map(x=>[x.id,x]));
     return ds.map(d=>({depotId:d.id,depotName:d.name,quantity:Number(m.get(d.id)?.quantity||0)}));
   }
+  function deriveGroup(a){
+    const direct =
+      a.Group?.Name ?? a.group?.name ??
+      a.ArticleGroup?.Name ?? a.articleGroup?.name ??
+      a.GroupName ?? a.groupName ??
+      a.ArticleGroupName ?? a.articleGroupName ??
+      "";
+    if (typeof direct === "string" && direct.trim()) return direct.trim();
+
+    const name=String(a.Name ?? a.name ?? "").trim().toUpperCase();
+    const known=[
+      ["KEVIN&COCO","KEVIN&COCO"],["KEVIN & COCO","KEVIN&COCO"],
+      ["FARM STAY","FARM STAY"],["DR.ALTHEA","DR.ALTHEA"],["DR. ALTHEA","DR.ALTHEA"],
+      ["MEDI-PEEL","MEDIPEEL"],["MEDIPEEL","MEDIPEEL"],["BIO WORLD","BIO WORLD"],
+      ["TOP FACE","TOPFACE"],["TOPFACE","TOPFACE"],["LUXVISAGE","LUXVISAGE"],
+      ["OLLIN","OLLIN"],["SADOER","SADOER"],["RUBYFACE","RUBYFACE"],["FRUDIA","FRUDIA"],
+      ["LATTAFA","LATTAFA"],["ARMAF","ARMAF"],["ZIMAYA","ZIMAYA"],["VT ","VT"],
+      ["BILION BEAUTY","BILION BEAUTY"],["MILAI","MILAI"]
+    ];
+    for(const [prefix,label] of known){ if(name.startsWith(prefix)) return label; }
+    const first=name.split(/\s+/)[0]?.replace(/[^A-ZА-ЯЁ0-9&+.-]/g,"")||"";
+    return first || "ДРУГИЕ";
+  }
   function shape(a,ds){
     const x=simpleArticle(a);
-    const g=(a.Group&&a.Group.Name)||(a.group&&a.group.name)||a.Group||a.group||"Без группы"; return {...x,group:String(g||"Без группы"),stocks:stocksFor(a,ds)};
+    return {...x,group:deriveGroup(a),stocks:stocksFor(a,ds)};
   }
   async function search(q){
     const s=String(q||"").trim().toLowerCase();

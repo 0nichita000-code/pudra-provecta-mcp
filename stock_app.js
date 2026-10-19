@@ -82,7 +82,7 @@ export function createStockApp(deps) {
     if(!url.pathname.startsWith("/stock/api/"))return false;
     const a=authInfo(req); if(!a.ok){sendJson(res,401,{error:"Неверный PIN"});return true;}
     if(req.method==="GET"&&url.pathname==="/stock/api/meta"){
-      const {ds}=await catalogs();sendJson(res,200,{depots:ds,user:a.user,role:a.role});return true;
+      const rawDepots=await getDepots(false);const ds=rawDepots.map(simpleDepot).filter(d=>d.id);sendJson(res,200,{depots:ds,user:a.user,role:a.role});return true;
     }
     if(req.method==="GET"&&url.pathname==="/stock/api/search"){
       const products=await search(url.searchParams.get("q")||"");sendJson(res,200,{products});return true;

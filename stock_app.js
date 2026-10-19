@@ -50,13 +50,12 @@ export function createStockApp(deps) {
   }
   async function search(q){
     const s=String(q||"").trim().toLowerCase();
-    if(!s)return [];
     const {rawArticles,ds}=await catalogs();
     const exact=/^\d{8,14}$/.test(s);
     const matched=rawArticles.filter(a=>{
       const vals=[a.Name,a.name,a.Barcode,a.barcode,a.Code,a.code,...articleBarcodes(a)].map(v=>String(v||"").toLowerCase());
-      return exact?vals.includes(s):vals.some(v=>v.includes(s));
-    }).slice(0,exact?1:50);
+      return !s ? true : (exact?vals.includes(s):vals.some(v=>v.includes(s)));
+    }).slice(0,!s?6000:(exact?1:50));
     return matched.map(a=>shape(a,ds));
   }
   async function findProduct(productId,barcode){

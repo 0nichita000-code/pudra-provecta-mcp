@@ -105,20 +105,47 @@ async function search(q){
 async function refresh(){try{msg($("searchMsg"),"Обновляю остатки…");await api("/stock/api/refresh",{method:"POST",body:"{}"});msg($("searchMsg"),"Остатки обновлены","ok");if(S.product)await search(S.product.barcode||S.product.name);}catch(e){msg($("searchMsg"),e.message,"bad");}}
 function statusRu(s){return ({NEW:"Новая",APPROVED:"Подтверждена",PICKING:"Собирается",SENT:"Отправлена",RECEIVED:"Получена",CLOSED:"Закрыта",REJECTED:"Отклонена"})[s]||s;}
 async function loadInventory(){
-  $("invInfo").textContent="Загружаю группы…";
+  $("invInfo").textContent="Загружаю актуальные остатки…";
   $("groupList").innerHTML="";
   $("inventoryHome").classList.remove("hidden");
   $("inventoryGroupView").classList.add("hidden");
   try{
     const d=await api("/stock/api/search?q=");
     S.inventory=d.products||[];
-    const groups=[...new Set(S.inventory.map(p=>p.group||"Без группы"))].sort((a,b)=>a.localeCompare(b,"ru"));
-    $("groupList").innerHTML=groups.map(g=>'<button class="ghost invGroupBtn" data-group="'+esc(g)+'" style="width:100%;text-align:left;margin-bottom:8px;padding:14px 16px">'+esc(g)+'</button>').join("");
-    $("invInfo").textContent="Групп: "+groups.length;
-    document.querySelectorAll(".invGroupBtn").forEach(b=>b.addEventListener("click",()=>openInventoryGroup(b.dataset.group)));
+
+    // Если кэш остатков ещё не успел загрузиться после перезапуска сервера,
+    // не показываем ложные нули — ждём и пробуем ещё раз.
+    const positiveCount=S.inventory.reduce((n,p)=>n+p.stocks.filter(x=>Number(x.quantity)>0).length,0);
+    if(!positiveCount){
+      $("invInfo").textContent="Остатки обновляются с Provecta…";
+      await new Promise(r=>setTimeout(r,5000));
+      const d2=await api("/stock/api/search?q=");
+      S.inventory=d2.products||[];
+    }
+
+    renderGroupList();
   }catch(e){
     $("invInfo").innerHTML='<div class="notice bad">'+esc(e.message)+'</div>';
   }
+}
+function availableGroups(){
+  const map=new Map();
+  for(const p of S.inventory){
+    const hasStock=p.stocks.some(x=>Number(x.quantity)>0);
+    if(!hasStock)continue;
+    const g=p.group||"ДРУГИЕ";
+    map.set(g,(map.get(g)||0)+1);
+  }
+  return [...map.entries()].sort((a,b)=>a[0].localeCompare(b[0],"ru"));
+}
+function renderGroupList(){
+  const q=$("groupSearch").value.trim().toLowerCase();
+  const groups=availableGroups().filter(([g])=>!q||g.toLowerCase().includes(q));
+  $("groupList").innerHTML=groups.length?groups.map(([g,count])=>
+    '<button class="ghost invGroupBtn" data-group="'+esc(g)+'" style="width:100%;text-align:left;margin-bottom:8px;padding:14px 16px"><b>'+esc(g)+'</b><span class="pill" style="float:right">'+count+'</span></button>'
+  ).join(""):'<div class="notice">Группы с положительным остатком не найдены.</div>';
+  $("invInfo").textContent="Групп с товаром в наличии: "+groups.length;
+  document.querySelectorAll(".invGroupBtn").forEach(b=>b.addEventListener("click",()=>openInventoryGroup(b.dataset.group)));
 }
 function openInventoryGroup(group){
   S.invGroupName=group;
@@ -128,7 +155,7 @@ function openInventoryGroup(group){
   $("invGroupTitle").textContent=group;
   $("invDepot").innerHTML='<option value="">Выберите магазин</option>'+S.depots.map(d=>'<option value="'+esc(d.id)+'">'+esc(d.name)+'</option>').join("");
   $("invSearch").value="";
-  $("inventoryList").innerHTML='<div class="muted">Выберите магазин, чтобы увидеть товары в наличии.</div>';
+  $("inventoryList").innerHTML='<div class="muted">Выберите магазин, чтобы увидеть только товары с остатком больше 0.</div>';
   $("invMore").classList.add("hidden");
 }
 function inventoryFiltered(){
@@ -136,7 +163,7 @@ function inventoryFiltered(){
   if(!depotId)return [];
   const q=$("invSearch").value.trim().toLowerCase();
   return S.inventory.filter(p=>{
-    if((p.group||"Без группы")!==S.invGroupName)return false;
+    if((p.group||"ДРУГИЕ")!==S.invGroupName)return false;
     const st=Number(p.stocks.find(x=>x.depotId===depotId)?.quantity||0);
     if(st<=0)return false;
     if(!q)return true;
@@ -158,7 +185,7 @@ function renderInventory(reset=false){
   $("inventoryList").innerHTML=shown.length?shown.map((p,i)=>{
     const qty=Number(p.stocks.find(x=>x.depotId===depotId)?.quantity||0);
     return '<div class="product invProduct" data-inv="'+i+'"><div class="name">'+esc(p.name)+'</div><div class="muted">'+esc(p.barcode||"—")+' · '+esc(p.price)+' MDL</div><div class="stock"><span>'+esc(depotName)+'</span><span class="qty">'+esc(qty)+'</span></div></div>';
-  }).join(""):'<div class="notice">В этой группе сейчас нет товара в наличии в выбранном магазине.</div>';
+  }).join(""):'<div class="notice">В этой группе нет товара с положительным остатком в выбранном магазине.</div>';
   $("invMore").classList.toggle("hidden",S.invShown>=rows.length);
   document.querySelectorAll(".invProduct").forEach(el=>el.addEventListener("click",()=>{
     const p=shown[Number(el.dataset.inv)];
@@ -351,6 +378,6 @@ async function switchCamera(){
 }
 
 $("loginBtn").addEventListener("click",login);$("searchBtn").addEventListener("click",()=>search());$("search").addEventListener("keydown",e=>{if(e.key==="Enter")search();});$("refreshBtn").addEventListener("click",refresh);
-$("startScan").addEventListener("click",startScan);$("switchCamera").addEventListener("click",switchCamera);$("stopScan").addEventListener("click",stopScan);$("invReload").addEventListener("click",()=>{S.inventory=[];loadInventory();});$("invBack").addEventListener("click",()=>{$("inventoryHome").classList.remove("hidden");$("inventoryGroupView").classList.add("hidden");});$("invDepot").addEventListener("change",()=>renderInventory(true));$("invSearch").addEventListener("input",()=>renderInventory(true));$("invMore").addEventListener("click",()=>renderInventory(false));$("reloadReq").addEventListener("click",loadRequests);$("reloadDiff").addEventListener("click",loadDiffs);
+$("startScan").addEventListener("click",startScan);$("switchCamera").addEventListener("click",switchCamera);$("stopScan").addEventListener("click",stopScan);$("invReload").addEventListener("click",()=>{S.inventory=[];loadInventory();});$("groupSearch").addEventListener("input",renderGroupList);$("invBack").addEventListener("click",()=>{$("inventoryHome").classList.remove("hidden");$("inventoryGroupView").classList.add("hidden");renderGroupList();});$("invDepot").addEventListener("change",()=>renderInventory(true));$("invSearch").addEventListener("input",()=>renderInventory(true));$("invMore").addEventListener("click",()=>renderInventory(false));$("reloadReq").addEventListener("click",loadRequests);$("reloadDiff").addEventListener("click",loadDiffs);
 document.querySelectorAll(".tab").forEach(b=>b.addEventListener("click",()=>tab(b.dataset.tab)));
 })();

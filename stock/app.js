@@ -3,7 +3,26 @@ const S={user:"",role:"staff",pin:"",depots:[],product:null,stream:null,scanTime
 const $=id=>document.getElementById(id);
 const esc=s=>String(s??"").replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[m]));
 function headers(){return {"content-type":"application/json","x-pudra-pin":S.pin,"x-pudra-user":S.user,"x-pudra-role":S.role};}
-async function api(url,opt={}){const r=await fetch(url,{...opt,headers:{...headers(),...(opt.headers||{})}});const d=await r.json().catch(()=>({}));if(!r.ok)throw new Error(d.error||"Ошибка");return d;}
+async function api(url,opt={}){
+  let last;
+  for(let i=0;i<2;i++){
+    try{
+      const ctl=new AbortController();
+      const t=setTimeout(()=>ctl.abort(),20000);
+      const r=await fetch(url,{...opt,signal:ctl.signal,headers:{...headers(),...(opt.headers||{})}});
+      clearTimeout(t);
+      const d=await r.json().catch(()=>({}));
+      if(!r.ok)throw new Error(d.error||("Ошибка "+r.status));
+      return d;
+    }catch(e){
+      last=e;
+      if(i===0)await new Promise(r=>setTimeout(r,800));
+    }
+  }
+  if(last?.name==="AbortError")throw new Error("Сервер отвечает слишком долго. Повторите вход.");
+  if(String(last?.message||"").includes("Failed to fetch"))throw new Error("Не удалось связаться с сервером. Обновите страницу и попробуйте ещё раз.");
+  throw last;
+}
 function msg(el,text,type=""){el.innerHTML=text?'<div class="notice '+type+'">'+esc(text)+'</div>':"";}
 
 function pushNotice(title,body){try{if("Notification" in window&&Notification.permission==="granted")new Notification(title,{body});}catch{}}

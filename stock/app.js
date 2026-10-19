@@ -1,15 +1,44 @@
 (()=>{
-const S={user:"",role:"staff",pin:"",depots:[],product:null,stream:null,scanTimer:null};
+const S={user:"",role:"staff",pin:"",depots:[],product:null,stream:null,scanTimer:null,watchTimer:null,lastTransferId:0,lastDiffId:0};
 const $=id=>document.getElementById(id);
 const esc=s=>String(s??"").replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[m]));
 function headers(){return {"content-type":"application/json","x-pudra-pin":S.pin,"x-pudra-user":S.user,"x-pudra-role":S.role};}
 async function api(url,opt={}){const r=await fetch(url,{...opt,headers:{...headers(),...(opt.headers||{})}});const d=await r.json().catch(()=>({}));if(!r.ok)throw new Error(d.error||"Ошибка");return d;}
 function msg(el,text,type=""){el.innerHTML=text?'<div class="notice '+type+'">'+esc(text)+'</div>':"";}
+
+function pushNotice(title,body){try{if("Notification" in window&&Notification.permission==="granted")new Notification(title,{body});}catch{}}
+async function adminWatch(first=false){
+  if(S.role!=="admin")return;
+  try{
+    const [tr,df]=await Promise.all([api("/stock/api/transfers"),api("/stock/api/discrepancies")]);
+    const tmax=Math.max(0,...tr.items.map(x=>Number(x.id)||0));
+    const dmax=Math.max(0,...df.items.map(x=>Number(x.id)||0));
+    if(!first&&S.lastTransferId&&tmax>S.lastTransferId){
+      const x=tr.items.find(x=>Number(x.id)===tmax);
+      pushNotice("Новая заявка PUDRA",x?x.from_depot_name+" → "+x.to_depot_name+" · "+x.product_name:"Новая заявка на перемещение");
+    }
+    if(!first&&S.lastDiffId&&dmax>S.lastDiffId){
+      const x=df.items.find(x=>Number(x.id)===dmax);
+      pushNotice("Расхождение PUDRA",x?x.depot_name+" · "+x.product_name+" · "+x.difference+" шт.":"Новое расхождение остатка");
+    }
+    S.lastTransferId=tmax; S.lastDiffId=dmax;
+    if(!$("adminTab").classList.contains("hidden")) loadRequests();
+    if(!$("diffTab").classList.contains("hidden")) loadDiffs();
+  }catch{}
+}
+function startAdminWatch(){
+  if(S.role!=="admin")return;
+  try{if("Notification" in window&&Notification.permission==="default")Notification.requestPermission();}catch{}
+  adminWatch(true);
+  if(S.watchTimer)clearInterval(S.watchTimer);
+  S.watchTimer=setInterval(()=>adminWatch(false),15000);
+}
+
 function tab(id){document.querySelectorAll(".tabPanel").forEach(x=>x.classList.add("hidden"));$(id).classList.remove("hidden");document.querySelectorAll(".tab").forEach(x=>x.classList.toggle("active",x.dataset.tab===id));if(id==="adminTab")loadRequests();if(id==="diffTab")loadDiffs();}
 async function login(){
   S.user=$("userName").value.trim();S.role=$("role").value;S.pin=$("pin").value;
   if(!S.user||!S.pin)return msg($("loginMsg"),"Введите имя и PIN","bad");
-  try{const m=await api("/stock/api/meta");S.depots=m.depots;$("login").classList.add("hidden");$("app").classList.remove("hidden");$("who").textContent=S.user+(S.role==="admin"?" · админ":"");document.querySelectorAll(".adminOnly").forEach(x=>x.classList.toggle("hidden",S.role!=="admin"));msg($("loginMsg"),"");}
+  try{const m=await api("/stock/api/meta");S.depots=m.depots;$("login").classList.add("hidden");$("app").classList.remove("hidden");$("who").textContent=S.user+(S.role==="admin"?" · админ":"");document.querySelectorAll(".adminOnly").forEach(x=>x.classList.toggle("hidden",S.role!=="admin"));msg($("loginMsg"),"");if(S.role==="admin")startAdminWatch();}
   catch(e){msg($("loginMsg"),e.message,"bad");}
 }
 function stockRows(p){return p.stocks.map(x=>'<div class="stock"><span>'+esc(x.depotName)+'</span><span class="qty '+(Number(x.quantity)<=0?"zero":"")+'">'+esc(x.quantity)+'</span></div>').join("");}

@@ -76,6 +76,10 @@ export function createStockApp(deps) {
     if(req.method==="GET"&&(url.pathname==="/stock"||url.pathname==="/stock/")){
       const data=await fs.readFile(path.join(__dirname,"stock","index.html"));res.writeHead(200,{"content-type":"text/html; charset=utf-8","cache-control":"no-store"});res.end(data);return true;
     }
+    if(req.method==="GET"&&url.pathname==="/stock/zxing.js"){
+      const data=await fs.readFile(path.join(__dirname,"node_modules","@zxing","browser","umd","zxing-browser.min.js"));
+      res.writeHead(200,{"content-type":"application/javascript; charset=utf-8","cache-control":"public,max-age=86400"});res.end(data);return true;
+    }
     if(req.method==="GET"&&url.pathname==="/stock/app.js"){
       const data=await fs.readFile(path.join(__dirname,"stock","app.js"));res.writeHead(200,{"content-type":"application/javascript; charset=utf-8","cache-control":"no-store"});res.end(data);return true;
     }

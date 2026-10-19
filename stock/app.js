@@ -117,7 +117,7 @@ async function loadDiffs(){
     const d=await api("/stock/api/discrepancies");$("diffs").innerHTML=d.items.length?d.items.map(x=>'<div class="req"><div class="name">'+esc(x.product_name)+'</div><div>'+esc(x.depot_name)+': Provecta <b>'+esc(x.system_qty)+'</b> → факт <b>'+esc(x.actual_qty)+'</b> · разница <b>'+(Number(x.difference)>0?"+":"")+esc(x.difference)+'</b></div><div class="muted">'+esc(x.employee)+' · '+new Date(x.created_at).toLocaleString()+(x.comment?' · '+esc(x.comment):'')+'</div></div>').join(""):'<div class="muted">Расхождений нет</div>';
   }catch(e){$("diffs").innerHTML='<div class="notice bad">'+esc(e.message)+'</div>';}
 }
-async function stopScan(){if(S.scanTimer)clearInterval(S.scanTimer);S.scanTimer=null;if(S.stream){S.stream.getTracks().forEach(t=>t.stop());S.stream=null;}$("video").classList.add("hidden");}
+async function stopScan(){if(S.scanTimer)clearInterval(S.scanTimer);S.scanTimer=null;try{if(S.zxingControls)S.zxingControls.stop();}catch{}S.zxingControls=null;if(S.stream){S.stream.getTracks().forEach(t=>t.stop());S.stream=null;}$("video").classList.add("hidden");}
 async function startScan(){
   await stopScan();msg($("scanInfo"),"Запускаю камеру…");
   try{
@@ -127,7 +127,25 @@ async function startScan(){
       S.scanTimer=setInterval(async()=>{try{const codes=await det.detect($("video"));if(codes[0]?.rawValue){const v=codes[0].rawValue;await stopScan();tab("searchTab");$("search").value=v;search(v);}}catch{}},500);
       msg($("scanInfo"),"Наведите камеру на штрихкод.","ok");
     }else{
-      msg($("scanInfo"),"На этом телефоне автоматическое чтение камерой не поддерживается. Введите штрихкод в поиске.","bad");
+      msg($("scanInfo"),"Подключаю сканер для iPhone…");
+      try{
+        const zxing=await import("https://cdn.jsdelivr.net/npm/@zxing/browser@0.1.5/+esm");
+        const reader=new zxing.BrowserMultiFormatReader();
+        if(S.stream){S.stream.getTracks().forEach(t=>t.stop());S.stream=null;}
+        $("video").srcObject=null;
+        S.zxingControls=await reader.decodeFromVideoDevice(undefined,$("video"),async(result,error,controls)=>{
+          if(result){
+            const v=result.getText();
+            try{controls.stop();}catch{}
+            S.zxingControls=null;
+            tab("searchTab");$("search").value=v;search(v);
+          }
+        });
+        $("video").classList.remove("hidden");
+        msg($("scanInfo"),"Наведите камеру на штрихкод.","ok");
+      }catch(e){
+        msg($("scanInfo"),"Не удалось запустить сканер. Разрешите камеру и попробуйте ещё раз.","bad");
+      }
     }
   }catch(e){msg($("scanInfo"),"Нет доступа к камере: "+e.message,"bad");}
 }

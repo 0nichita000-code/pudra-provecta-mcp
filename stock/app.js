@@ -1,5 +1,5 @@
 (()=>{
-const S={user:"",role:"staff",pin:"",depots:[],product:null,stream:null,scanTimer:null,watchTimer:null,lastTransferId:0,lastDiffId:0};
+const S={user:"",role:"staff",pin:"",depots:[],product:null,stream:null,scanTimer:null,watchTimer:null,lastTransferId:0,lastDiffId:0,zxingControls:null,scanLocked:false,lastScanned:""};
 const $=id=>document.getElementById(id);
 const esc=s=>String(s??"").replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[m]));
 function headers(){return {"content-type":"application/json","x-pudra-pin":S.pin,"x-pudra-user":encodeURIComponent(S.user),"x-pudra-role":S.role};}
@@ -117,15 +117,66 @@ async function loadDiffs(){
     const d=await api("/stock/api/discrepancies");$("diffs").innerHTML=d.items.length?d.items.map(x=>'<div class="req"><div class="name">'+esc(x.product_name)+'</div><div>'+esc(x.depot_name)+': Provecta <b>'+esc(x.system_qty)+'</b> → факт <b>'+esc(x.actual_qty)+'</b> · разница <b>'+(Number(x.difference)>0?"+":"")+esc(x.difference)+'</b></div><div class="muted">'+esc(x.employee)+' · '+new Date(x.created_at).toLocaleString()+(x.comment?' · '+esc(x.comment):'')+'</div></div>').join(""):'<div class="muted">Расхождений нет</div>';
   }catch(e){$("diffs").innerHTML='<div class="notice bad">'+esc(e.message)+'</div>';}
 }
-async function stopScan(){if(S.scanTimer)clearInterval(S.scanTimer);S.scanTimer=null;try{if(S.zxingControls)S.zxingControls.stop();}catch{}S.zxingControls=null;if(S.stream){S.stream.getTracks().forEach(t=>t.stop());S.stream=null;}$("video").classList.add("hidden");}
+async function stopScan(){
+  if(S.scanTimer)clearInterval(S.scanTimer);
+  S.scanTimer=null;
+  try{if(S.zxingControls)S.zxingControls.stop();}catch{}
+  S.zxingControls=null;
+  if(S.stream){S.stream.getTracks().forEach(t=>t.stop());S.stream=null;}
+  S.scanLocked=false;
+  $("video").classList.add("hidden");
+  $("scanResult").classList.add("hidden");
+}
+function scanStockRows(p){
+  return p.stocks.map(x=>'<div class="stock"><span>'+esc(x.depotName)+'</span><span class="qty '+(Number(x.quantity)<=0?"zero":"")+'">'+esc(x.quantity)+'</span></div>').join("");
+}
+async function handleScannedCode(v){
+  if(S.scanLocked)return;
+  S.scanLocked=true;
+  S.lastScanned=v;
+  msg($("scanInfo"),"Штрихкод найден: "+v+". Загружаю остатки…","ok");
+  try{
+    const d=await api("/stock/api/search?q="+encodeURIComponent(v));
+    if(!d.products.length){
+      $("scanResult").classList.remove("hidden");
+      $("scanResult").innerHTML='<div class="name">Товар не найден</div><div class="muted">Штрихкод: '+esc(v)+'</div><button id="scanNext" class="primary" style="width:100%;margin-top:12px">Дальше</button>';
+    }else{
+      const p=d.products[0];
+      S.product=p;
+      $("scanResult").classList.remove("hidden");
+      $("scanResult").innerHTML=
+        '<div class="row"><div class="grow"><div class="name" style="font-size:20px">'+esc(p.name)+'</div><div class="muted">Штрихкод: '+esc(p.barcode||v)+' · Цена: '+esc(p.price)+' MDL</div></div></div>'+
+        '<h4>Остатки</h4>'+scanStockRows(p)+
+        '<button id="scanNext" class="primary" style="width:100%;margin-top:14px">Дальше</button>';
+    }
+    $("scanNext").addEventListener("click",()=>{
+      $("scanResult").classList.add("hidden");
+      $("scanResult").innerHTML="";
+      S.scanLocked=false;
+      S.lastScanned="";
+      msg($("scanInfo"),"Камера включена. Наведите на следующий штрихкод.","ok");
+    });
+  }catch(e){
+    $("scanResult").classList.remove("hidden");
+    $("scanResult").innerHTML='<div class="notice bad">'+esc(e.message)+'</div><button id="scanNext" class="primary" style="width:100%;margin-top:12px">Дальше</button>';
+    $("scanNext").addEventListener("click",()=>{
+      $("scanResult").classList.add("hidden");
+      S.scanLocked=false;
+      msg($("scanInfo"),"Камера включена. Наведите на следующий штрихкод.","ok");
+    });
+  }
+}
 async function startScan(){
-  await stopScan();
+  if(S.stream||S.zxingControls){
+    S.scanLocked=false;
+    $("scanResult").classList.add("hidden");
+    msg($("scanInfo"),"Камера уже включена. Наведите на штрихкод.","ok");
+    return;
+  }
   msg($("scanInfo"),"Запускаю сканер…");
   try{
     $("video").classList.remove("hidden");
 
-    // На iPhone/Brave используем ZXing напрямую: встроенный BarcodeDetector
-    // может существовать, но фактически не распознавать EAN-коды.
     if(window.ZXingBrowser){
       const reader=new ZXingBrowser.BrowserMultiFormatReader();
       const constraints={
@@ -138,34 +189,24 @@ async function startScan(){
         }
       };
       S.zxingControls=await reader.decodeFromConstraints(constraints,$("video"),async(result,error,controls)=>{
-        if(result){
+        if(result&&!S.scanLocked){
           const v=String(result.getText ? result.getText() : result.text || "").trim();
-          if(v){
-            msg($("scanInfo"),"Штрихкод найден: "+v,"ok");
-            try{controls.stop();}catch{}
-            S.zxingControls=null;
-            setTimeout(()=>{
-              tab("searchTab");
-              $("search").value=v;
-              search(v);
-            },250);
-          }
+          if(v) handleScannedCode(v);
         }
       });
-
+      S.stream=$("video").srcObject||null;
       try{
-        const track=$("video").srcObject?.getVideoTracks?.()[0];
+        const track=S.stream?.getVideoTracks?.()[0];
         const caps=track?.getCapabilities?.();
         const adv={};
-        if(caps?.focusMode?.includes?.("continuous")) adv.focusMode="continuous";
+        if(caps?.focusMode?.includes?.("continuous"))adv.focusMode="continuous";
         if(caps?.zoom){
           const z=Math.min(Math.max(1.5,caps.zoom.min||1),caps.zoom.max||1.5);
-          if(z>1) adv.zoom=z;
+          if(z>1)adv.zoom=z;
         }
-        if(Object.keys(adv).length) await track.applyConstraints({advanced:[adv]});
+        if(Object.keys(adv).length)await track.applyConstraints({advanced:[adv]});
       }catch{}
-
-      msg($("scanInfo"),"Сканер активен. Держите штрихкод ровно в центре, примерно 15–25 см от камеры.","ok");
+      msg($("scanInfo"),"Камера включена. После результата нажимайте «Дальше».","ok");
       return;
     }
 
@@ -178,21 +219,15 @@ async function startScan(){
       await $("video").play();
       const det=new BarcodeDetector({formats:["ean_13","ean_8","code_128","upc_a","upc_e"]});
       S.scanTimer=setInterval(async()=>{
+        if(S.scanLocked)return;
         try{
           const codes=await det.detect($("video"));
-          if(codes[0]?.rawValue){
-            const v=codes[0].rawValue;
-            await stopScan();
-            tab("searchTab");
-            $("search").value=v;
-            search(v);
-          }
+          if(codes[0]?.rawValue)handleScannedCode(codes[0].rawValue);
         }catch{}
       },350);
-      msg($("scanInfo"),"Сканер активен. Наведите камеру на штрихкод.","ok");
+      msg($("scanInfo"),"Камера включена. После результата нажимайте «Дальше».","ok");
       return;
     }
-
     throw new Error("Модуль сканера не загружен");
   }catch(e){
     await stopScan();

@@ -1,0 +1,89 @@
+(()=>{
+const S={user:"",role:"staff",pin:"",depots:[],product:null,stream:null,scanTimer:null};
+const $=id=>document.getElementById(id);
+const esc=s=>String(s??"").replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[m]));
+function headers(){return {"content-type":"application/json","x-pudra-pin":S.pin,"x-pudra-user":S.user,"x-pudra-role":S.role};}
+async function api(url,opt={}){const r=await fetch(url,{...opt,headers:{...headers(),...(opt.headers||{})}});const d=await r.json().catch(()=>({}));if(!r.ok)throw new Error(d.error||"Ошибка");return d;}
+function msg(el,text,type=""){el.innerHTML=text?'<div class="notice '+type+'">'+esc(text)+'</div>':"";}
+function tab(id){document.querySelectorAll(".tabPanel").forEach(x=>x.classList.add("hidden"));$(id).classList.remove("hidden");document.querySelectorAll(".tab").forEach(x=>x.classList.toggle("active",x.dataset.tab===id));if(id==="adminTab")loadRequests();if(id==="diffTab")loadDiffs();}
+async function login(){
+  S.user=$("userName").value.trim();S.role=$("role").value;S.pin=$("pin").value;
+  if(!S.user||!S.pin)return msg($("loginMsg"),"Введите имя и PIN","bad");
+  try{const m=await api("/api/meta");S.depots=m.depots;$("login").classList.add("hidden");$("app").classList.remove("hidden");$("who").textContent=S.user+(S.role==="admin"?" · админ":"");document.querySelectorAll(".adminOnly").forEach(x=>x.classList.toggle("hidden",S.role!=="admin"));msg($("loginMsg"),"");}
+  catch(e){msg($("loginMsg"),e.message,"bad");}
+}
+function stockRows(p){return p.stocks.map(x=>'<div class="stock"><span>'+esc(x.depotName)+'</span><span class="qty '+(Number(x.quantity)<=0?"zero":"")+'">'+esc(x.quantity)+'</span></div>').join("");}
+function optionList(selected=""){return '<option value="">Выберите точку</option>'+S.depots.map(d=>'<option value="'+esc(d.id)+'" '+(d.id===selected?"selected":"")+'>'+esc(d.name)+'</option>').join("");}
+function showProduct(p){
+  S.product=p;
+  const card=$("productCard");card.classList.remove("hidden");
+  card.innerHTML='<div class="row"><div class="grow"><div class="name" style="font-size:20px">'+esc(p.name)+'</div><div class="muted">Штрихкод: '+esc(p.barcode||"—")+' · Код: '+esc(p.code||"—")+'</div></div><span class="pill">'+esc(p.price)+' MDL</span></div>'+
+    '<h4>Остатки</h4>'+stockRows(p)+
+    '<div style="height:12px"></div><div class="grid"><button id="moveBtn" class="primary">Запросить перемещение</button><button id="diffBtn" class="ghost">Есть расхождение</button></div>'+
+    '<div id="actionBox" style="margin-top:12px"></div>';
+  $("moveBtn").addEventListener("click",showMoveForm);$("diffBtn").addEventListener("click",showDiffForm);
+  card.scrollIntoView({behavior:"smooth",block:"start"});
+}
+function showMoveForm(){
+  $("actionBox").innerHTML='<div class="card" style="margin:0"><h3 style="margin-top:0">Заявка на перемещение</h3><div class="grid"><label>ОТКУДА<select id="from">'+optionList()+'</select></label><label>КУДА<select id="to">'+optionList()+'</select></label></div><label>Количество<input id="qty" type="number" min="1" step="1" value="1"></label><button id="sendMove" class="primary" style="width:100%;margin-top:10px">Отправить заявку</button><div id="moveMsg" style="margin-top:10px"></div></div>';
+  $("sendMove").addEventListener("click",sendMove);
+}
+async function sendMove(){
+  try{
+    const d=await api("/api/transfers",{method:"POST",body:JSON.stringify({productId:S.product.id,barcode:S.product.barcode,fromDepotId:$("from").value,toDepotId:$("to").value,quantity:Number($("qty").value)})});
+    msg($("moveMsg"),"Заявка №"+d.request.id+" отправлена администратору.","ok");
+  }catch(e){msg($("moveMsg"),e.message,"bad");}
+}
+function showDiffForm(){
+  $("actionBox").innerHTML='<div class="card" style="margin:0"><h3 style="margin-top:0">Несоответствие остатка</h3><label>Магазин<select id="diffDepot">'+optionList()+'</select></label><label>Фактически посчитано<input id="actual" type="number" min="0" step="1"></label><label>Комментарий<textarea id="comment" rows="2" placeholder="Необязательно"></textarea></label><button id="sendDiff" class="primary" style="width:100%;margin-top:10px">Сообщить администратору</button><div id="diffMsg" style="margin-top:10px"></div></div>';
+  $("sendDiff").addEventListener("click",sendDiff);
+}
+async function sendDiff(){
+  try{
+    const d=await api("/api/discrepancies",{method:"POST",body:JSON.stringify({productId:S.product.id,barcode:S.product.barcode,depotId:$("diffDepot").value,actualQty:Number($("actual").value),comment:$("comment").value})});
+    const x=d.discrepancy;msg($("diffMsg"),"Отправлено. Разница: "+x.difference+" шт.","ok");
+  }catch(e){msg($("diffMsg"),e.message,"bad");}
+}
+async function search(q){
+  q=(q??$("search").value).trim();if(!q)return;
+  msg($("searchMsg"),"Ищу…");$("results").innerHTML="";
+  try{
+    const d=await api("/api/search?q="+encodeURIComponent(q));msg($("searchMsg"),d.products.length?"Найдено: "+d.products.length:"Ничего не найдено");
+    if(d.products.length===1){showProduct(d.products[0]);return;}
+    $("results").innerHTML=d.products.map((p,i)=>'<div class="product" data-i="'+i+'"><div class="name">'+esc(p.name)+'</div><div class="muted">'+esc(p.barcode||"—")+' · '+esc(p.price)+' MDL</div></div>').join("");
+    document.querySelectorAll(".product[data-i]").forEach(el=>el.addEventListener("click",()=>showProduct(d.products[Number(el.dataset.i)])));
+  }catch(e){msg($("searchMsg"),e.message,"bad");}
+}
+async function refresh(){try{msg($("searchMsg"),"Обновляю остатки…");await api("/api/refresh",{method:"POST",body:"{}"});msg($("searchMsg"),"Остатки обновлены","ok");if(S.product)await search(S.product.barcode||S.product.name);}catch(e){msg($("searchMsg"),e.message,"bad");}}
+function statusRu(s){return ({NEW:"Новая",APPROVED:"Подтверждена",PICKING:"Собирается",SENT:"Отправлена",RECEIVED:"Получена",CLOSED:"Закрыта",REJECTED:"Отклонена"})[s]||s;}
+async function loadRequests(){
+  try{
+    const d=await api("/api/transfers");const groups={};
+    d.items.forEach(x=>{const k=x.from_depot_name+" → "+x.to_depot_name;(groups[k]||(groups[k]=[])).push(x);});
+    $("requests").innerHTML=Object.keys(groups).length?Object.entries(groups).map(([route,items])=>'<div class="route">'+esc(route)+' <span class="pill">'+items.length+'</span></div>'+items.map(x=>'<div class="req"><div class="name">'+esc(x.product_name)+' — '+esc(x.quantity)+' шт.</div><div class="muted">'+esc(x.employee)+' · '+new Date(x.created_at).toLocaleString()+' · '+statusRu(x.status)+'</div><div class="row" style="margin-top:6px">'+["APPROVED","PICKING","SENT","RECEIVED","CLOSED","REJECTED"].map(st=>'<button class="ghost st" data-id="'+x.id+'" data-st="'+st+'" style="padding:7px 9px">'+statusRu(st)+'</button>').join("")+'</div></div>').join("")).join(""):'<div class="muted">Заявок нет</div>';
+    document.querySelectorAll(".st").forEach(b=>b.addEventListener("click",async()=>{await api("/api/transfers/"+b.dataset.id,{method:"PATCH",body:JSON.stringify({status:b.dataset.st})});loadRequests();}));
+  }catch(e){$("requests").innerHTML='<div class="notice bad">'+esc(e.message)+'</div>';}
+}
+async function loadDiffs(){
+  try{
+    const d=await api("/api/discrepancies");$("diffs").innerHTML=d.items.length?d.items.map(x=>'<div class="req"><div class="name">'+esc(x.product_name)+'</div><div>'+esc(x.depot_name)+': Provecta <b>'+esc(x.system_qty)+'</b> → факт <b>'+esc(x.actual_qty)+'</b> · разница <b>'+(Number(x.difference)>0?"+":"")+esc(x.difference)+'</b></div><div class="muted">'+esc(x.employee)+' · '+new Date(x.created_at).toLocaleString()+(x.comment?' · '+esc(x.comment):'')+'</div></div>').join(""):'<div class="muted">Расхождений нет</div>';
+  }catch(e){$("diffs").innerHTML='<div class="notice bad">'+esc(e.message)+'</div>';}
+}
+async function stopScan(){if(S.scanTimer)clearInterval(S.scanTimer);S.scanTimer=null;if(S.stream){S.stream.getTracks().forEach(t=>t.stop());S.stream=null;}$("video").classList.add("hidden");}
+async function startScan(){
+  await stopScan();msg($("scanInfo"),"Запускаю камеру…");
+  try{
+    const stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:"environment"}}});S.stream=stream;$("video").srcObject=stream;await $("video").play();$("video").classList.remove("hidden");
+    if("BarcodeDetector" in window){
+      const det=new BarcodeDetector({formats:["ean_13","ean_8","code_128","upc_a","upc_e"]});
+      S.scanTimer=setInterval(async()=>{try{const codes=await det.detect($("video"));if(codes[0]?.rawValue){const v=codes[0].rawValue;await stopScan();tab("searchTab");$("search").value=v;search(v);}}catch{}},500);
+      msg($("scanInfo"),"Наведите камеру на штрихкод.","ok");
+    }else{
+      msg($("scanInfo"),"На этом телефоне автоматическое чтение камерой не поддерживается. Введите штрихкод в поиске.","bad");
+    }
+  }catch(e){msg($("scanInfo"),"Нет доступа к камере: "+e.message,"bad");}
+}
+$("loginBtn").addEventListener("click",login);$("searchBtn").addEventListener("click",()=>search());$("search").addEventListener("keydown",e=>{if(e.key==="Enter")search();});$("refreshBtn").addEventListener("click",refresh);
+$("startScan").addEventListener("click",startScan);$("stopScan").addEventListener("click",stopScan);$("reloadReq").addEventListener("click",loadRequests);$("reloadDiff").addEventListener("click",loadDiffs);
+document.querySelectorAll(".tab").forEach(b=>b.addEventListener("click",()=>tab(b.dataset.tab)));
+})();

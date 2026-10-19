@@ -25,10 +25,18 @@ export function createStockApp(deps) {
   const depotName=(ds,id)=>ds.find(d=>d.id===id)?.name||id;
   const isTopFace=n=>/TOP\s*FACE|TOPFACE/i.test(n||"");
   const isHairElastic=n=>/ELASTIC|РЕЗИН|REZIN/i.test(n||"");
+  function allowedDepotName(name){
+    const n=String(name||"").toUpperCase().trim();
+    return n==="PUDRA ORHEI" ||
+      n==="PUDRA GLODENI" ||
+      n==="PUDRA BALTI" ||
+      n==="PUDRA BALTI PINK" ||
+      n==="DEPOZIT RISCANI";
+  }
 
   async function catalogs(){
     const [rawArticles,rawDepots]=await Promise.all([getArticles(false),getDepots(false)]);
-    return {rawArticles,ds:rawDepots.map(simpleDepot).filter(d=>d.id)};
+    return {rawArticles,ds:rawDepots.map(simpleDepot).filter(d=>d.id && allowedDepotName(d.name))};
   }
   function stocksFor(a,ds){
     const aid=idOf(a);
@@ -86,7 +94,7 @@ export function createStockApp(deps) {
     if(!url.pathname.startsWith("/stock/api/"))return false;
     const a=authInfo(req); if(!a.ok){sendJson(res,401,{error:"Неверный PIN"});return true;}
     if(req.method==="GET"&&url.pathname==="/stock/api/meta"){
-      const rawDepots=await getDepots(false);const ds=rawDepots.map(simpleDepot).filter(d=>d.id);sendJson(res,200,{depots:ds,user:a.user,role:a.role});return true;
+      const rawDepots=await getDepots(false);const ds=rawDepots.map(simpleDepot).filter(d=>d.id && allowedDepotName(d.name));sendJson(res,200,{depots:ds,user:a.user,role:a.role});return true;
     }
     if(req.method==="GET"&&url.pathname==="/stock/api/search"){
       const products=await search(url.searchParams.get("q")||"");sendJson(res,200,{products});return true;

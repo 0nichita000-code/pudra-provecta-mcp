@@ -129,8 +129,8 @@ async function startScan(){
     }else{
       msg($("scanInfo"),"Подключаю сканер для iPhone…");
       try{
-        const zxing=await import("https://cdn.jsdelivr.net/npm/@zxing/browser@0.1.5/+esm");
-        const reader=new zxing.BrowserMultiFormatReader();
+        if(!window.ZXingBrowser)throw new Error("ZXing не загружен");
+        const reader=new ZXingBrowser.BrowserMultiFormatReader();
         if(S.stream){S.stream.getTracks().forEach(t=>t.stop());S.stream=null;}
         $("video").srcObject=null;
         S.zxingControls=await reader.decodeFromVideoDevice(undefined,$("video"),async(result,error,controls)=>{
@@ -144,7 +144,7 @@ async function startScan(){
         $("video").classList.remove("hidden");
         msg($("scanInfo"),"Наведите камеру на штрихкод.","ok");
       }catch(e){
-        msg($("scanInfo"),"Не удалось запустить сканер. Разрешите камеру и попробуйте ещё раз.","bad");
+        msg($("scanInfo"),"Не удалось запустить сканер: "+(e?.message||"ошибка"),"bad");
       }
     }
   }catch(e){msg($("scanInfo"),"Нет доступа к камере: "+e.message,"bad");}

@@ -61,8 +61,9 @@ video{width:100%;border-radius:16px;background:#000;max-height:420px}
 
     <section id="scanTab" class="tabPanel hidden">
       <div class="card">
-        <div id="scanInfo" class="notice">Нажмите «Запустить камеру» и наведите на штрихкод.</div>
+        <div id="scanInfo" class="notice">Нажмите «Запустить камеру» один раз. После сканирования нажимайте «Дальше» — камера останется включённой.</div>
         <video id="video" class="hidden" playsinline muted></video>
+        <div id="scanResult" class="card hidden" style="margin-top:12px"></div>
         <div class="row" style="margin-top:10px">
           <button id="startScan" class="primary">Запустить камеру</button>
           <button id="stopScan" class="ghost">Остановить</button>

@@ -46,7 +46,7 @@ export function createStockApp(deps) {
   }
   function shape(a,ds){
     const x=simpleArticle(a);
-    return {...x,stocks:stocksFor(a,ds)};
+    const g=(a.Group&&a.Group.Name)||(a.group&&a.group.name)||a.Group||a.group||"Без группы"; return {...x,group:String(g||"Без группы"),stocks:stocksFor(a,ds)};
   }
   async function search(q){
     const s=String(q||"").trim().toLowerCase();

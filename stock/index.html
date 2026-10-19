@@ -75,14 +75,24 @@ video{width:100%;border-radius:16px;background:#000;max-height:420px}
 
     <section id="inventoryTab" class="tabPanel hidden">
       <div class="card">
-        <div class="row">
-          <input id="invSearch" class="grow" placeholder="Поиск по названию, коду или штрихкоду">
-          <select id="invGroup" style="max-width:280px"><option value="">Все группы</option></select>
-          <button id="invReload" class="ghost">Обновить</button>
+        <div id="inventoryHome">
+          <div class="row">
+            <h3 class="grow" style="margin:0">Группы товаров</h3>
+            <button id="invReload" class="ghost">Обновить</button>
+          </div>
+          <div id="invInfo" class="muted" style="margin-top:8px"></div>
+          <div id="groupList" style="margin-top:10px"></div>
         </div>
-        <div id="invInfo" class="muted" style="margin-top:8px"></div>
-        <div id="inventoryList"></div>
-        <button id="invMore" class="ghost hidden" style="width:100%;margin-top:12px">Показать ещё</button>
+        <div id="inventoryGroupView" class="hidden">
+          <button id="invBack" class="ghost" style="margin-bottom:10px">← Назад к группам</button>
+          <h3 id="invGroupTitle" style="margin:0 0 10px"></h3>
+          <label>Магазин
+            <select id="invDepot"><option value="">Выберите магазин</option></select>
+          </label>
+          <input id="invSearch" placeholder="Поиск внутри группы" style="margin-top:10px">
+          <div id="inventoryList" style="margin-top:10px"></div>
+          <button id="invMore" class="ghost hidden" style="width:100%;margin-top:12px">Показать ещё</button>
+        </div>
       </div>
     </section>
 

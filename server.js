@@ -649,26 +649,41 @@ async function refreshStockCache(force = false) {
 
   stockCache.refreshing = true;
   try {
-    const depots = (await getDepots(false)).map(simpleDepot).filter(d => d.id);
+    const allowed = new Set([
+      "PUDRA ORHEI",
+      "PUDRA GLODENI",
+      "PUDRA BALTI",
+      "PUDRA BALTI PINK",
+      "DEPOZIT RISCANI"
+    ]);
+    const depots = (await getDepots(false))
+      .map(simpleDepot)
+      .filter(d => d.id && allowed.has(String(d.name || "").toUpperCase().trim()));
+
     const byArticle = new Map();
 
-    const results = await Promise.all(depots.map(async depot => {
-      const rows = asArray(await apiGet("/v1/resume/currentBalance", { depotId: [depot.id] }));
-      return { depot, rows };
-    }));
+    // Provecta начинает отменять запросы при слишком большом параллелизме.
+    // Загружаем только 5 нужных точек, максимум по 2 одновременно.
+    for (let i = 0; i < depots.length; i += 2) {
+      const batch = depots.slice(i, i + 2);
+      const results = await Promise.all(batch.map(async depot => {
+        const rows = asArray(await apiGet("/v1/resume/currentBalance", { depotId: [depot.id] }));
+        return { depot, rows };
+      }));
 
-    for (const { depot, rows } of results) {
-      for (const row of rows) {
-        const aid = idOf(row.Article ?? row.article ?? row.ArticleId ?? row.articleId);
-        if (!aid) continue;
-        const qty = Number(row.BalanceQuantitySum ?? row.balanceQuantitySum ?? 0) || 0;
-        if (!byArticle.has(aid)) byArticle.set(aid, []);
-        byArticle.get(aid).push({ id: depot.id, name: depot.name, quantity: qty });
+      for (const { depot, rows } of results) {
+        for (const row of rows) {
+          const aid = idOf(row.Article ?? row.article ?? row.ArticleId ?? row.articleId);
+          if (!aid) continue;
+          const qty = Number(row.BalanceQuantitySum ?? row.balanceQuantitySum ?? 0) || 0;
+          if (!byArticle.has(aid)) byArticle.set(aid, []);
+          byArticle.get(aid).push({ id: depot.id, name: depot.name, quantity: qty });
+        }
       }
     }
 
     stockCache = { at: Date.now(), byArticle, ready: true, refreshing: false };
-    console.log(`Stock cache ready: ${byArticle.size} articles across depots`);
+    console.log(`Stock cache ready: ${byArticle.size} articles across ${depots.length} PUDRA depots`);
   } catch (e) {
     stockCache.refreshing = false;
     console.error("Stock cache refresh failed", e?.message || e);

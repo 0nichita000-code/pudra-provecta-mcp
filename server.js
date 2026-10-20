@@ -652,21 +652,18 @@ async function refreshStockCache(force = false) {
     const depots = (await getDepots(false)).map(simpleDepot).filter(d => d.id);
     const byArticle = new Map();
 
-    for (let i = 0; i < depots.length; i += 2) {
-      const batch = depots.slice(i, i + 2);
-      const results = await Promise.all(batch.map(async depot => {
-        const rows = asArray(await apiGet("/v1/resume/currentBalance", { depotId: [depot.id] }));
-        return { depot, rows };
-      }));
+    const results = await Promise.all(depots.map(async depot => {
+      const rows = asArray(await apiGet("/v1/resume/currentBalance", { depotId: [depot.id] }));
+      return { depot, rows };
+    }));
 
-      for (const { depot, rows } of results) {
-        for (const row of rows) {
-          const aid = idOf(row.Article ?? row.article ?? row.ArticleId ?? row.articleId);
-          if (!aid) continue;
-          const qty = Number(row.BalanceQuantitySum ?? row.balanceQuantitySum ?? 0) || 0;
-          if (!byArticle.has(aid)) byArticle.set(aid, []);
-          byArticle.get(aid).push({ id: depot.id, name: depot.name, quantity: qty });
-        }
+    for (const { depot, rows } of results) {
+      for (const row of rows) {
+        const aid = idOf(row.Article ?? row.article ?? row.ArticleId ?? row.articleId);
+        if (!aid) continue;
+        const qty = Number(row.BalanceQuantitySum ?? row.balanceQuantitySum ?? 0) || 0;
+        if (!byArticle.has(aid)) byArticle.set(aid, []);
+        byArticle.get(aid).push({ id: depot.id, name: depot.name, quantity: qty });
       }
     }
 

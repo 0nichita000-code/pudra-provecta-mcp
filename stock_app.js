@@ -175,6 +175,14 @@ export function createStockApp(deps) {
     if(req.method==="GET"&&url.pathname==="/stock/api/transfers"){
       if(!a.admin){sendJson(res,403,{error:"Только администратор"});return true;}sendJson(res,200,{items:transfers});return true;
     }
+    if(req.method==="DELETE"&&/^\/stock\/api\/transfers\/\d+$/.test(url.pathname)){
+      if(!a.admin){sendJson(res,403,{error:"Только администратор"});return true;}
+      const id=url.pathname.split("/").pop();
+      const i=transfers.findIndex(x=>String(x.id)===id);
+      if(i<0){sendJson(res,404,{error:"Заявка не найдена"});return true;}
+      const [deleted]=transfers.splice(i,1);
+      sendJson(res,200,{ok:true,deleted});return true;
+    }
     if(req.method==="PATCH"&&/^\/stock\/api\/transfers\/\d+$/.test(url.pathname)){
       if(!a.admin){sendJson(res,403,{error:"Только администратор"});return true;}const b=await readBody(req);const allowed=["NEW","APPROVED","PICKING","SENT","RECEIVED","CLOSED","REJECTED"];if(!allowed.includes(b.status)){sendJson(res,400,{error:"Неверный статус"});return true;}
       const id=url.pathname.split("/").pop(),row=transfers.find(x=>String(x.id)===id);if(row)row.status=b.status;sendJson(res,200,{item:row});return true;
@@ -206,6 +214,14 @@ export function createStockApp(deps) {
     }
     if(req.method==="GET"&&url.pathname==="/stock/api/discrepancies"){
       if(!a.admin){sendJson(res,403,{error:"Только администратор"});return true;}sendJson(res,200,{items:discrepancies});return true;
+    }
+    if(req.method==="DELETE"&&/^\/stock\/api\/discrepancies\/\d+$/.test(url.pathname)){
+      if(!a.admin){sendJson(res,403,{error:"Только администратор"});return true;}
+      const id=url.pathname.split("/").pop();
+      const i=discrepancies.findIndex(x=>String(x.id)===id);
+      if(i<0){sendJson(res,404,{error:"Расхождение не найдено"});return true;}
+      const [deleted]=discrepancies.splice(i,1);
+      sendJson(res,200,{ok:true,deleted});return true;
     }
     sendJson(res,404,{error:"Not found"});return true;
   };

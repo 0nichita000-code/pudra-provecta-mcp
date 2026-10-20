@@ -20,7 +20,11 @@ input,select,textarea{width:100%;padding:13px;border:1px solid #d7d7df;border-ra
 .tabs{display:flex;gap:8px;overflow:auto;padding-bottom:8px}.tab{white-space:nowrap}.tab.active{background:#111;color:#fff}
 .notice{padding:10px 12px;border-radius:12px;background:#fff4cc;color:#5d4800;font-size:14px}.ok{background:#e8f5e9;color:#176b2c}.bad{background:#fdecea;color:var(--bad)}
 .route{font-weight:900;margin:14px 0 6px}.req{border-left:4px solid var(--pink);padding-left:10px;margin:10px 0}
-video{width:100%;border-radius:16px;background:#000;max-height:420px}
+video{width:100%;border-radius:16px;background:#000;max-height:420px;display:block}
+.scanVideoWrap{position:relative;margin-top:10px}
+.scanFrame{position:absolute;left:12%;right:12%;top:38%;height:24%;border:3px solid rgba(255,255,255,.65);border-radius:14px;pointer-events:none;transition:border-color .12s,box-shadow .12s,transform .12s;z-index:2}
+.scanFrame.ok{border-color:#19c763;box-shadow:0 0 0 3px rgba(25,199,99,.25),0 0 22px rgba(25,199,99,.85);transform:scale(1.015)}
+.scanFrame.hidden{display:none!important}
 @media(max-width:640px){.grid{grid-template-columns:1fr}.wrap{padding:10px}.card{border-radius:14px;padding:14px}}
 </style>
 </head>
@@ -64,7 +68,10 @@ video{width:100%;border-radius:16px;background:#000;max-height:420px}
     <section id="scanTab" class="tabPanel hidden">
       <div class="card">
         <div id="scanInfo" class="notice">Нажмите «Запустить камеру» один раз. После сканирования нажимайте «Дальше» — камера останется включённой.</div>
-        <video id="video" class="hidden" playsinline muted></video>
+        <div id="scanVideoWrap" class="scanVideoWrap hidden">
+          <video id="video" playsinline muted></video>
+          <div id="scanFrame" class="scanFrame"></div>
+        </div>
         <div id="scanResult" class="card hidden" style="margin-top:12px"></div>
         <div class="row" style="margin-top:10px">
           <button id="startScan" class="primary">Запустить камеру</button>

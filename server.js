@@ -23,7 +23,7 @@ let authCache = { token: "", client: "", expiresAt: 0 };
 let articleCache = { at: 0, items: [], byId: new Map(), byBarcode: new Map() };
 let branchCache = { at: 0, items: [] };
 let depotCache = { at: 0, items: [] };
-let stockCache = { at: 0, byArticle: new Map(), ready: false, refreshing: false };
+let stockCache = { at: 0, byArticle: new Map(), ready: false, refreshing: false, readyDepots: new Set() };
 
 function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
 
@@ -660,27 +660,48 @@ async function refreshStockCache(force = false) {
       .map(simpleDepot)
       .filter(d => d.id && allowed.has(String(d.name || "").toUpperCase().trim()));
 
-    const byArticle = new Map();
+    // При первом запуске начинаем пустой прогрессивный кэш.
+    // При обычном обновлении сохраняем старые цифры до прихода новых.
+    if (!stockCache.ready) {
+      stockCache.byArticle = new Map();
+      stockCache.readyDepots = new Set();
+    }
 
-    // Здесь уже только 5 нужных точек PUDRA, поэтому безопасно загружаем
-    // их одновременно. Это заметно сокращает прогрев остатков после рестарта.
-    const results = await Promise.all(depots.map(async depot => {
+    const tasks = depots.map(async depot => {
       const rows = asArray(await apiGet("/v1/resume/currentBalance", { depotId: [depot.id] }));
-      return { depot, rows };
-    }));
 
-    for (const { depot, rows } of results) {
+      // Удаляем старые значения только этой точки.
+      for (const [aid, xs] of stockCache.byArticle) {
+        const kept = xs.filter(x => x.id !== depot.id);
+        if (kept.length) stockCache.byArticle.set(aid, kept);
+        else stockCache.byArticle.delete(aid);
+      }
+
       for (const row of rows) {
         const aid = idOf(row.Article ?? row.article ?? row.ArticleId ?? row.articleId);
         if (!aid) continue;
         const qty = Number(row.BalanceQuantitySum ?? row.balanceQuantitySum ?? 0) || 0;
-        if (!byArticle.has(aid)) byArticle.set(aid, []);
-        byArticle.get(aid).push({ id: depot.id, name: depot.name, quantity: qty });
+        if (!stockCache.byArticle.has(aid)) stockCache.byArticle.set(aid, []);
+        stockCache.byArticle.get(aid).push({ id: depot.id, name: depot.name, quantity: qty });
       }
-    }
 
-    stockCache = { at: Date.now(), byArticle, ready: true, refreshing: false };
-    console.log(`Stock cache ready: ${byArticle.size} articles across ${depots.length} PUDRA depots`);
+      stockCache.readyDepots.add(depot.id);
+      stockCache.at = Date.now();
+      stockCache.ready = stockCache.readyDepots.size > 0;
+      console.log(`Stock depot ready: ${depot.name} (${stockCache.readyDepots.size}/${depots.length})`);
+    });
+
+    const settled = await Promise.allSettled(tasks);
+    const failed = settled.filter(x => x.status === "rejected");
+    stockCache.refreshing = false;
+    stockCache.ready = stockCache.readyDepots.size > 0;
+    stockCache.at = Date.now();
+
+    if (failed.length) {
+      console.error(`Stock cache partial: ${stockCache.readyDepots.size}/${depots.length} depots ready; ${failed.length} failed`);
+    } else {
+      console.log(`Stock cache ready: ${stockCache.byArticle.size} articles across ${depots.length} PUDRA depots`);
+    }
   } catch (e) {
     stockCache.refreshing = false;
     console.error("Stock cache refresh failed", e?.message || e);
@@ -688,13 +709,19 @@ async function refreshStockCache(force = false) {
 }
 
 function getCachedStocks(articleId) {
-  if (!stockCache.ready) return null;
   const depots = depotCache.items.map(simpleDepot).filter(d => d.id);
+  if (!depots.length) return null;
   const found = new Map((stockCache.byArticle.get(articleId) || []).map(x => [x.id, x]));
-  return depots.map(d => found.get(d.id) || { id: d.id, name: d.name, quantity: 0 });
+  return depots.map(d => {
+    const x = found.get(d.id);
+    if (x) return { ...x, loading: false };
+    const depotReady = stockCache.readyDepots?.has?.(d.id);
+    return { id: d.id, name: d.name, quantity: depotReady ? 0 : null, loading: !depotReady };
+  });
 }
+
 function getStockCacheState() {
-  return { ready: stockCache.ready, refreshing: stockCache.refreshing, at: stockCache.at };
+  return { ready: stockCache.ready, refreshing: stockCache.refreshing, at: stockCache.at, readyDepots: stockCache.readyDepots?.size || 0 };
 }
 
 function normalizeDateTime(s, end = false) {

@@ -35,13 +35,6 @@ function initScanAudio(){
 }
 function scanFeedback(){
   try{if(navigator.vibrate)navigator.vibrate(80);}catch{}
-
-function flashScanFrame(){
-  const f=$("scanFrame");
-  if(!f)return;
-  f.classList.add("ok");
-  setTimeout(()=>f.classList.remove("ok"),700);
-}
   try{
     initScanAudio();
     if(!S.audioCtx)return;
@@ -54,6 +47,27 @@ function flashScanFrame(){
     g.gain.exponentialRampToValueAtTime(0.0001,S.audioCtx.currentTime+0.11);
     o.connect(g);g.connect(S.audioCtx.destination);
     o.start();o.stop(S.audioCtx.currentTime+0.12);
+  }catch{}
+}
+function flashScanFrame(){
+  const f=$("scanFrame");
+  if(!f)return;
+  f.classList.add("ok");
+  setTimeout(()=>f.classList.remove("ok"),700);
+}
+async function tuneCamera(track){
+  try{
+    if(!track?.getCapabilities)return;
+    const caps=track.getCapabilities();
+    const advanced={};
+    if(caps?.focusMode?.includes?.("continuous"))advanced.focusMode="continuous";
+    if(caps?.zoom){
+      const min=Number(caps.zoom.min ?? 1);
+      const max=Number(caps.zoom.max ?? 1);
+      const target=Math.min(max,Math.max(min,1.5));
+      if(Number.isFinite(target))advanced.zoom=target;
+    }
+    if(Object.keys(advanced).length)await track.applyConstraints({advanced:[advanced]});
   }catch{}
 }
 
@@ -440,13 +454,7 @@ async function startScan(){
         }
       });
       S.stream=$("video").srcObject||null;
-      try{
-        const track=S.stream?.getVideoTracks?.()[0];
-        const caps=track?.getCapabilities?.();
-        const adv={};
-        if(caps?.focusMode?.includes?.("continuous"))adv.focusMode="continuous";
-        if(Object.keys(adv).length)await track.applyConstraints({advanced:[adv]});
-      }catch{}
+      await tuneCamera(S.stream?.getVideoTracks?.()[0]);
       try{localStorage.setItem("pudraCameraReady","1");}catch{}
       msg($("scanInfo"),"Камера включена. После результата нажимайте «Дальше».","ok");
       return;
@@ -459,6 +467,7 @@ async function startScan(){
       S.stream=stream;
       $("video").srcObject=stream;
       await $("video").play();
+      await tuneCamera(stream.getVideoTracks?.()[0]);
       const det=new BarcodeDetector({formats:["ean_13","ean_8","code_128","upc_a","upc_e"]});
       S.scanTimer=setInterval(async()=>{
         if(S.scanLocked)return;

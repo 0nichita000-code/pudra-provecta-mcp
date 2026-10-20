@@ -32,7 +32,7 @@ video{width:100%;border-radius:16px;background:#000;max-height:420px}
     <div class="stack">
       <input id="userName" placeholder="Имя сотрудника">
       <select id="role"><option value="staff">Продавец</option><option value="admin">Администратор</option></select>
-      <input id="pin" type="password" inputmode="numeric" placeholder="PIN">
+      <div id="pinWrap"><input id="pin" type="password" inputmode="numeric" placeholder="PIN администратора"></div>
       <button id="loginBtn" class="primary">Войти</button>
       <div id="loginMsg"></div>
     </div>
@@ -45,6 +45,7 @@ video{width:100%;border-radius:16px;background:#000;max-height:420px}
       <button class="tab ghost" data-tab="inventoryTab">Все остатки</button>
       <button class="tab ghost adminOnly" data-tab="adminTab">Заявки</button>
       <button class="tab ghost adminOnly" data-tab="diffTab">Расхождения</button>
+      <button class="tab ghost adminOnly" data-tab="monitorTab">Мониторинг</button>
     </div>
 
     <section id="searchTab" class="tabPanel">
@@ -67,7 +68,7 @@ video{width:100%;border-radius:16px;background:#000;max-height:420px}
         <div id="scanResult" class="card hidden" style="margin-top:12px"></div>
         <div class="row" style="margin-top:10px">
           <button id="startScan" class="primary">Запустить камеру</button>
-          <button id="switchCamera" class="ghost">Сменить камеру</button>
+          <button id="switchCamera" class="ghost">Сменить заднюю камеру</button>
           <button id="stopScan" class="ghost">Остановить</button>
         </div>
       </div>
@@ -94,6 +95,17 @@ video{width:100%;border-radius:16px;background:#000;max-height:420px}
           <div id="inventoryList" style="margin-top:10px"></div>
           <button id="invMore" class="ghost hidden" style="width:100%;margin-top:12px">Показать ещё</button>
         </div>
+      </div>
+    </section>
+
+    <section id="monitorTab" class="tabPanel hidden adminOnly">
+      <div class="card">
+        <div class="row">
+          <h3 class="grow" style="margin:0">Мониторинг</h3>
+          <button id="reloadMonitor" class="ghost">Обновить</button>
+        </div>
+        <div id="monitorSummary" style="margin-top:12px"></div>
+        <div id="monitorDepots" style="margin-top:12px"></div>
       </div>
     </section>
 

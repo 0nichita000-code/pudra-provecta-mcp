@@ -435,57 +435,68 @@ async function startScan(){
   try{
     $("scanVideoWrap").classList.remove("hidden");
 
+    // Открываем заднюю камеру сами: 720p быстрее и стабильнее для распознавания,
+    // чем 4K. facingMode ideal позволяет браузеру выбрать реальную заднюю камеру
+    // даже на телефонах, где exact работает нестабильно.
+    const stream=await navigator.mediaDevices.getUserMedia({
+      audio:false,
+      video:{
+        facingMode:{ideal:"environment"},
+        width:{ideal:1280},
+        height:{ideal:720},
+        frameRate:{ideal:30}
+      }
+    });
+    S.stream=stream;
+    $("video").srcObject=stream;
+    await $("video").play();
+    await tuneCamera(stream.getVideoTracks?.()[0]);
+
+    let scannerStarted=false;
+
+    // Основной сканер ZXing — работает и там, где BarcodeDetector отсутствует.
     if(window.ZXingBrowser){
       const reader=new ZXingBrowser.BrowserMultiFormatReader();
-
-      const constraints={
-        audio:false,
-        video:{
-          facingMode:{exact:"environment"},
-          width:{ideal:3840,min:1280},
-          height:{ideal:2160,min:720},
-          frameRate:{ideal:30}
-        }
-      };
-      S.zxingControls=await reader.decodeFromConstraints(constraints,$("video"),async(result,error,controls)=>{
+      S.zxingControls=await reader.decodeFromStream(stream,$("video"),(result,error,controls)=>{
         if(result&&!S.scanLocked){
           const v=String(result.getText ? result.getText() : result.text || "").trim();
-          if(v) handleScannedCode(v);
+          if(v)handleScannedCode(v);
         }
       });
-      S.stream=$("video").srcObject||null;
-      await tuneCamera(S.stream?.getVideoTracks?.()[0]);
-      try{localStorage.setItem("pudraCameraReady","1");}catch{}
-      msg($("scanInfo"),"Камера включена. После результата нажимайте «Дальше».","ok");
-      return;
+      scannerStarted=true;
     }
 
+    // Дополнительный параллельный распознаватель, если браузер его поддерживает.
+    // Он использует тот же видеопоток и повышает шанс быстрого чтения.
     if("BarcodeDetector" in window){
-      const stream=await navigator.mediaDevices.getUserMedia({
-        video:{facingMode:{exact:"environment"},width:{ideal:1920},height:{ideal:1080}}
-      });
-      S.stream=stream;
-      $("video").srcObject=stream;
-      await $("video").play();
-      await tuneCamera(stream.getVideoTracks?.()[0]);
-      const det=new BarcodeDetector({formats:["ean_13","ean_8","code_128","upc_a","upc_e"]});
-      S.scanTimer=setInterval(async()=>{
-        if(S.scanLocked)return;
-        try{
-          const codes=await det.detect($("video"));
-          if(codes[0]?.rawValue)handleScannedCode(codes[0].rawValue);
-        }catch{}
-      },350);
-      msg($("scanInfo"),"Камера включена. После результата нажимайте «Дальше».","ok");
-      return;
+      try{
+        const formats=await BarcodeDetector.getSupportedFormats?.().catch?.(()=>[]) || [];
+        const wanted=["ean_13","ean_8","code_128","code_39","upc_a","upc_e","itf"];
+        const use=formats.length?wanted.filter(x=>formats.includes(x)):wanted;
+        const det=new BarcodeDetector(use.length?{formats:use}:{});
+        S.scanTimer=setInterval(async()=>{
+          if(S.scanLocked)return;
+          try{
+            const codes=await det.detect($("video"));
+            const v=String(codes?.[0]?.rawValue||"").trim();
+            if(v)handleScannedCode(v);
+          }catch{}
+        },250);
+        scannerStarted=true;
+      }catch{}
     }
-    throw new Error("Модуль сканера не загружен");
+
+    if(!scannerStarted)throw new Error("Модуль сканера не загружен");
+
+    try{localStorage.setItem("pudraCameraReady","1");}catch{}
+    msg($("scanInfo"),"Камера включена. Наведите штрихкод в рамку.","ok");
   }catch(e){
     await stopScan();
     const m=String(e?.message||"не удалось запустить");
     msg($("scanInfo"),/Overconstrained|constraint|environment/i.test(m)?"Не удалось открыть заднюю камеру. Проверьте разрешение камеры в браузере.":"Ошибка сканера: "+m,"bad");
   }
 }
+
 async function switchCamera(){
   try{
     if(!S.cameraIds.length){

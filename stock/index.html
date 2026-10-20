@@ -47,6 +47,7 @@ video{width:100%;border-radius:16px;background:#000;max-height:420px;display:blo
       <button class="tab active ghost" data-tab="searchTab">Поиск</button>
       <button class="tab ghost" data-tab="scanTab">Сканер</button>
       <button class="tab ghost" data-tab="inventoryTab">Все остатки</button>
+      <button class="tab ghost adminOnly" data-tab="salesTab">Продажи</button>
       <button class="tab ghost adminOnly" data-tab="adminTab">Заявки</button>
       <button class="tab ghost adminOnly" data-tab="diffTab">Расхождения</button>
       <button class="tab ghost adminOnly" data-tab="monitorTab">Мониторинг</button>
@@ -101,6 +102,18 @@ video{width:100%;border-radius:16px;background:#000;max-height:420px;display:blo
           <div id="inventoryList" style="margin-top:10px"></div>
           <button id="invMore" class="ghost hidden" style="width:100%;margin-top:12px">Показать ещё</button>
         </div>
+      </div>
+    </section>
+
+    <section id="salesTab" class="tabPanel hidden adminOnly">
+      <div class="card">
+        <div class="row">
+          <h3 class="grow" style="margin:0">Продажи сегодня</h3>
+          <button id="reloadSales" class="ghost">Обновить</button>
+        </div>
+        <div id="salesDate" class="muted" style="margin-top:6px"></div>
+        <div id="salesSummary" style="margin-top:12px"></div>
+        <div id="salesStores" style="margin-top:12px"></div>
       </div>
     </section>
 

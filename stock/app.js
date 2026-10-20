@@ -306,18 +306,29 @@ async function stopScan(){
 function scanStockRows(p){
   return p.stocks.map(x=>{const q=x.quantity==null?"обновляется…":x.quantity;return '<div class="stock"><span>'+esc(x.depotName)+'</span><span class="qty '+(x.quantity!=null&&Number(x.quantity)<=0?"zero":"")+'">'+esc(q)+'</span></div>';}).join("");
 }
+async function fetchScannedProduct(v){
+  for(let i=0;i<20;i++){
+    const d=await api("/stock/api/search?q="+encodeURIComponent(v));
+    if(!d.products.length)return null;
+    const p=d.products[0];
+    const loading=p.stocks?.some(x=>x.quantity==null);
+    if(!loading)return p;
+    msg($("scanInfo"),"Штрихкод найден: "+v+". Остатки обновляются…");
+    await new Promise(r=>setTimeout(r,1500));
+  }
+  throw new Error("Остатки не успели загрузиться. Нажмите «Дальше» и отсканируйте ещё раз.");
+}
 async function handleScannedCode(v){
   if(S.scanLocked)return;
   S.scanLocked=true;
   S.lastScanned=v;
   msg($("scanInfo"),"Штрихкод найден: "+v+". Загружаю остатки…","ok");
   try{
-    const d=await api("/stock/api/search?q="+encodeURIComponent(v));
-    if(!d.products.length){
+    const p=await fetchScannedProduct(v);
+    if(!p){
       $("scanResult").classList.remove("hidden");
       $("scanResult").innerHTML='<div class="name">Товар не найден</div><div class="muted">Штрихкод: '+esc(v)+'</div><button id="scanNext" class="primary" style="width:100%;margin-top:12px">Дальше</button>';
     }else{
-      const p=d.products[0];
       S.product=p;
       $("scanResult").classList.remove("hidden");
       $("scanResult").innerHTML=

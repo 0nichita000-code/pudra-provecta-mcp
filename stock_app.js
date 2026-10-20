@@ -45,22 +45,6 @@ export function createStockApp(deps) {
     const m=new Map(cached.map(x=>[x.id,x]));
     return ds.map(d=>({depotId:d.id,depotName:d.name,quantity:Number(m.get(d.id)?.quantity||0),loading:false}));
   }
-  async function liveStocksFor(a,ds){
-    const aid=idOf(a);
-    // Один запрос сразу по всем 5 точкам вместо 5 отдельных запросов.
-    // Это используется как быстрый fallback при сканировании, если общий кэш
-    // ещё прогревается после перезапуска Render.
-    const data=await apiGet("/v1/resume/currentBalance",{depotId:ds.map(d=>d.id)});
-    const arr=asArray(data);
-    const qtyByDepot=new Map();
-    for(const row of (Array.isArray(arr)?arr:[])){
-      const rowAid=idOf(row.Article??row.article??row.ArticleId??row.articleId);
-      if(rowAid!==aid)continue;
-      const did=idOf(row.Depot??row.depot??row.DepotId??row.depotId);
-      if(did)qtyByDepot.set(did,Number(row.BalanceQuantitySum??row.balanceQuantitySum??0)||0);
-    }
-    return ds.map(d=>({depotId:d.id,depotName:d.name,quantity:Number(qtyByDepot.get(d.id)||0),loading:false}));
-  }
   function deriveGroup(a){
     const direct =
       a.Group?.Name ?? a.group?.name ??
@@ -114,18 +98,6 @@ export function createStockApp(deps) {
         try{
           const legacy=await legacySearchAdditionalBarcode(s);
           if(legacy?.article) matched=[legacy.article];
-        }catch{}
-      }
-    }
-
-    if(exact && matched.length===1){
-      const a=matched[0];
-      const cached=getCachedStocks(idOf(a));
-      if(!cached){
-        try{
-          const x=simpleArticle(a);
-          const stocks=await liveStocksFor(a,ds);
-          return [{...x,group:deriveGroup(a),stocks}];
         }catch{}
       }
     }

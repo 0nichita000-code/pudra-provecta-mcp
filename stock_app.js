@@ -5,7 +5,7 @@ import { fileURLToPath } from "node:url";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 export function createStockApp(deps) {
-  const { getArticles, getDepots, getCachedStocks, refreshStockCache, getStockCacheState, simpleDepot, simpleArticle, articleBarcodes, idOf, apiGet, modernSearchAdditionalBarcode, legacySearchAdditionalBarcode } = deps;
+  const { getArticles, getDepots, getCachedStocks, refreshStockCache, getStockCacheState, simpleDepot, simpleArticle, articleBarcodes, idOf, asArray, apiGet, modernSearchAdditionalBarcode, legacySearchAdditionalBarcode } = deps;
   const ADMIN_PIN = process.env.STOCK_ADMIN_PIN || "2468";
   const STAFF_PIN = process.env.STOCK_STAFF_PIN || "1357";
   const transfers = [];
@@ -49,7 +49,7 @@ export function createStockApp(deps) {
     const aid=idOf(a);
     const rows=await Promise.all(ds.map(async d=>{
       const data=await apiGet("/v1/resume/currentBalance",{depotId:[d.id]});
-      const arr=Array.isArray(data)?data:(data?.items||data?.Items||data?.data||data?.Data||[]);
+      const arr=asArray(data);
       const hit=(Array.isArray(arr)?arr:[]).find(r=>idOf(r.Article??r.article??r.ArticleId??r.articleId)===aid);
       return {depotId:d.id,depotName:d.name,quantity:Number(hit?.BalanceQuantitySum??hit?.balanceQuantitySum??0)||0,loading:false};
     }));

@@ -358,30 +358,10 @@ async function startScan(){
     if(window.ZXingBrowser){
       const reader=new ZXingBrowser.BrowserMultiFormatReader();
 
-      if(!S.cameraIds.length){
-        try{
-          const probe=await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:"environment"}},audio:false});
-          probe.getTracks().forEach(t=>t.stop());
-          const all=(await navigator.mediaDevices.enumerateDevices()).filter(d=>d.kind==="videoinput");
-          const rear=all.filter(d=>!/front|user|selfie|facing front/i.test(d.label||""));
-          const devs=rear.length?rear:all;
-          const score=d=>{
-            const n=(d.label||"").toLowerCase();
-            let s=0;
-            if(/back|rear|environment|main/.test(n))s+=50;
-            if(/front|user|selfie/.test(n))s-=100;
-            if(/ultra|macro|tele/.test(n))s-=20;
-            return s;
-          };
-          S.cameraIds=devs.sort((a,b)=>score(b)-score(a)).map(d=>d.deviceId);
-        }catch{}
-      }
-
-      const chosen=S.cameraIds[S.cameraIndex]||null;
       const constraints={
         audio:false,
         video:{
-          ...(chosen?{deviceId:{exact:chosen}}:{facingMode:{ideal:"environment"}}),
+          facingMode:{exact:"environment"},
           width:{ideal:3840,min:1280},
           height:{ideal:2160,min:720},
           frameRate:{ideal:30}
@@ -408,7 +388,7 @@ async function startScan(){
 
     if("BarcodeDetector" in window){
       const stream=await navigator.mediaDevices.getUserMedia({
-        video:{facingMode:{ideal:"environment"},width:{ideal:1920},height:{ideal:1080}}
+        video:{facingMode:{exact:"environment"},width:{ideal:1920},height:{ideal:1080}}
       });
       S.stream=stream;
       $("video").srcObject=stream;
@@ -427,7 +407,8 @@ async function startScan(){
     throw new Error("Модуль сканера не загружен");
   }catch(e){
     await stopScan();
-    msg($("scanInfo"),"Ошибка сканера: "+(e?.message||"не удалось запустить"),"bad");
+    const m=String(e?.message||"не удалось запустить");
+    msg($("scanInfo"),/Overconstrained|constraint|environment/i.test(m)?"Не удалось открыть заднюю камеру. Проверьте разрешение камеры в браузере.":"Ошибка сканера: "+m,"bad");
   }
 }
 async function switchCamera(){

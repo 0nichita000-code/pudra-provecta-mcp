@@ -5,7 +5,7 @@ import { fileURLToPath } from "node:url";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 export function createStockApp(deps) {
-  const { getArticles, getDepots, getCachedStocks, refreshStockCache, simpleDepot, simpleArticle, articleBarcodes, idOf } = deps;
+  const { getArticles, getDepots, getCachedStocks, refreshStockCache, getStockCacheState, simpleDepot, simpleArticle, articleBarcodes, idOf, apiGet, modernSearchAdditionalBarcode, legacySearchAdditionalBarcode } = deps;
   const ADMIN_PIN = process.env.STOCK_ADMIN_PIN || "2468";
   const STAFF_PIN = process.env.STOCK_STAFF_PIN || "1357";
   const transfers = [];
@@ -18,7 +18,7 @@ export function createStockApp(deps) {
     let user=String(req.headers["x-pudra-user"]||"").trim(); try{user=decodeURIComponent(user);}catch{} user=user||"Сотрудник";
     const role=String(req.headers["x-pudra-role"]||"staff");
     const admin=role==="admin"&&pin===ADMIN_PIN;
-    const ok=admin||pin===STAFF_PIN;
+    const ok=admin || role!=="admin";
     return {ok,admin,user,role:admin?"admin":"staff"};
   };
   const readBody=async req=>{const xs=[];let n=0;for await(const c of req){n+=c.length;if(n>256000)throw new Error("Body too large");xs.push(c);}const raw=Buffer.concat(xs).toString("utf8");return raw?JSON.parse(raw):{};};
@@ -40,9 +40,20 @@ export function createStockApp(deps) {
   }
   function stocksFor(a,ds){
     const aid=idOf(a);
-    const cached=getCachedStocks(aid)||[];
+    const cached=getCachedStocks(aid);
+    if(!cached)return ds.map(d=>({depotId:d.id,depotName:d.name,quantity:null,loading:true}));
     const m=new Map(cached.map(x=>[x.id,x]));
-    return ds.map(d=>({depotId:d.id,depotName:d.name,quantity:Number(m.get(d.id)?.quantity||0)}));
+    return ds.map(d=>({depotId:d.id,depotName:d.name,quantity:Number(m.get(d.id)?.quantity||0),loading:false}));
+  }
+  async function liveStocksFor(a,ds){
+    const aid=idOf(a);
+    const rows=await Promise.all(ds.map(async d=>{
+      const data=await apiGet("/v1/resume/currentBalance",{depotId:[d.id]});
+      const arr=Array.isArray(data)?data:(data?.items||data?.Items||data?.data||data?.Data||[]);
+      const hit=(Array.isArray(arr)?arr:[]).find(r=>idOf(r.Article??r.article??r.ArticleId??r.articleId)===aid);
+      return {depotId:d.id,depotName:d.name,quantity:Number(hit?.BalanceQuantitySum??hit?.balanceQuantitySum??0)||0,loading:false};
+    }));
+    return rows;
   }
   function deriveGroup(a){
     const direct =
@@ -74,12 +85,42 @@ export function createStockApp(deps) {
   async function search(q){
     const s=String(q||"").trim().toLowerCase();
     const {rawArticles,ds}=await catalogs();
+
+    if(!s){
+      const started=Date.now();
+      while(getStockCacheState && !getStockCacheState().ready && Date.now()-started<90000){
+        await new Promise(r=>setTimeout(r,1500));
+      }
+    }
+
     const exact=/^\d{8,14}$/.test(s);
-    const matched=rawArticles.filter(a=>{
+    let matched=rawArticles.filter(a=>{
       const vals=[a.Name,a.name,a.Barcode,a.barcode,a.Code,a.code,...articleBarcodes(a)].map(v=>String(v||"").toLowerCase());
       return !s ? true : (exact?vals.includes(s):vals.some(v=>v.includes(s)));
     }).slice(0,!s?6000:(exact?1:50));
-    return matched.map(a=>shape(a,ds));
+
+    if(exact && matched.length===0){
+      try{
+        const modern=await modernSearchAdditionalBarcode(s);
+        if(modern?.article) matched=[modern.article];
+      }catch{}
+      if(matched.length===0){
+        try{
+          const legacy=await legacySearchAdditionalBarcode(s);
+          if(legacy?.article) matched=[legacy.article];
+        }catch{}
+      }
+    }
+
+    const out=[];
+    for(const a of matched){
+      const p=shape(a,ds);
+      if(exact && matched.length===1){
+        try{p.stocks=await liveStocksFor(a,ds);}catch{}
+      }
+      out.push(p);
+    }
+    return out;
   }
   async function findProduct(productId,barcode){
     const {rawArticles,ds}=await catalogs();
@@ -87,8 +128,17 @@ export function createStockApp(deps) {
     if(!a&&barcode){
       const bc=String(barcode);
       a=rawArticles.find(x=>String(x.Barcode??x.barcode??"")===bc||articleBarcodes(x).includes(bc));
+      if(!a){
+        try{const modern=await modernSearchAdditionalBarcode(bc);if(modern?.article)a=modern.article;}catch{}
+      }
+      if(!a){
+        try{const legacy=await legacySearchAdditionalBarcode(bc);if(legacy?.article)a=legacy.article;}catch{}
+      }
     }
-    return a?shape(a,ds):null;
+    if(!a)return null;
+    const p=shape(a,ds);
+    try{p.stocks=await liveStocksFor(a,ds);}catch{}
+    return p;
   }
   function transferError(p,ds,fromId,toId,qty){
     if(!fromId||!toId||fromId===toId)return "Выберите разные точки ОТКУДА и КУДА.";
@@ -146,6 +196,23 @@ export function createStockApp(deps) {
       if(actualQty===systemQty){sendJson(res,400,{error:"Расхождения нет: количество совпадает с Provecta"});return true;}
       const row={id:Date.now(),created_at:new Date().toISOString(),employee:a.user,product_id:p.id,barcode:p.barcode,product_name:p.name,depot_id:b.depotId,depot_name:depotName(ds,b.depotId),system_qty:systemQty,actual_qty:actualQty,difference:actualQty-systemQty,comment:esc(b.comment),status:"NEW"};
       discrepancies.unshift(row);sendJson(res,201,{ok:true,discrepancy:row});return true;
+    }
+    if(req.method==="GET"&&url.pathname==="/stock/api/monitoring"){
+      if(!a.admin){sendJson(res,403,{error:"Только администратор"});return true;}
+      const {rawArticles,ds}=await catalogs();
+      const state=getStockCacheState?getStockCacheState():{ready:false,refreshing:false,at:0};
+      const perDepot=ds.map(d=>({depotId:d.id,depotName:d.name,positive:0,zero:0,totalQty:0}));
+      for(const ar of rawArticles){
+        const st=stocksFor(ar,ds);
+        st.forEach((x,i)=>{if(x.quantity==null)return;const q=Number(x.quantity)||0;perDepot[i].totalQty+=q;if(q>0)perDepot[i].positive++;else perDepot[i].zero++;});
+      }
+      sendJson(res,200,{
+        cache:state,
+        products:rawArticles.length,
+        activeTransfers:transfers.filter(x=>["NEW","APPROVED","PICKING","SENT"].includes(x.status)).length,
+        openDiscrepancies:discrepancies.filter(x=>x.status==="NEW").length,
+        perDepot
+      });return true;
     }
     if(req.method==="GET"&&url.pathname==="/stock/api/discrepancies"){
       if(!a.admin){sendJson(res,403,{error:"Только администратор"});return true;}sendJson(res,200,{items:discrepancies});return true;

@@ -43,7 +43,11 @@ export function createStockApp(deps) {
     const cached=getCachedStocks(aid);
     if(!cached)return ds.map(d=>({depotId:d.id,depotName:d.name,quantity:null,loading:true}));
     const m=new Map(cached.map(x=>[x.id,x]));
-    return ds.map(d=>({depotId:d.id,depotName:d.name,quantity:Number(m.get(d.id)?.quantity||0),loading:false}));
+    return ds.map(d=>{
+      const x=m.get(d.id);
+      if(!x || x.quantity==null || x.loading)return {depotId:d.id,depotName:d.name,quantity:null,loading:true};
+      return {depotId:d.id,depotName:d.name,quantity:Number(x.quantity)||0,loading:false};
+    });
   }
   function deriveGroup(a){
     const direct =

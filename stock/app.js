@@ -334,16 +334,28 @@ function scanStockRows(p){
   return p.stocks.map(x=>{const q=x.quantity==null?"обновляется…":x.quantity;return '<div class="stock"><span>'+esc(x.depotName)+'</span><span class="qty '+(x.quantity!=null&&Number(x.quantity)<=0?"zero":"")+'">'+esc(q)+'</span></div>';}).join("");
 }
 async function fetchScannedProduct(v){
-  for(let i=0;i<20;i++){
-    const d=await api("/stock/api/search?q="+encodeURIComponent(v));
-    if(!d.products.length)return null;
-    const p=d.products[0];
-    const loading=p.stocks?.some(x=>x.quantity==null);
-    if(!loading)return p;
-    msg($("scanInfo"),"Штрихкод найден: "+v+". Остатки обновляются…");
-    await new Promise(r=>setTimeout(r,1500));
+  const d=await api("/stock/api/search?q="+encodeURIComponent(v));
+  return d.products?.[0]||null;
+}
+async function refreshScanStocks(v){
+  for(let i=0;i<45;i++){
+    if(!S.scanLocked||S.lastScanned!==v)return;
+    try{
+      const d=await api("/stock/api/search?q="+encodeURIComponent(v));
+      const p=d.products?.[0];
+      if(p && !p.stocks?.some(x=>x.quantity==null)){
+        S.product=p;
+        const box=$("scanStocks");
+        if(box)box.innerHTML=scanStockRows(p);
+        msg($("scanInfo"),"Товар найден. Остатки загружены.","ok");
+        return;
+      }
+    }catch{}
+    await new Promise(r=>setTimeout(r,2000));
   }
-  throw new Error("Остатки не успели загрузиться. Нажмите «Дальше» и отсканируйте ещё раз.");
+  const box=$("scanStocks");
+  if(box)box.innerHTML='<div class="notice bad">Не удалось получить остатки. Нажмите «Обновить остатки».</div><button id="scanRetryStock" class="ghost" style="width:100%;margin-top:8px">Обновить остатки</button>';
+  if($("scanRetryStock"))$("scanRetryStock").addEventListener("click",()=>refreshScanStocks(v));
 }
 async function handleScannedCode(v){
   if(S.scanLocked)return;
@@ -361,8 +373,14 @@ async function handleScannedCode(v){
       $("scanResult").classList.remove("hidden");
       $("scanResult").innerHTML=
         '<div class="row"><div class="grow"><div class="name" style="font-size:20px">'+esc(p.name)+'</div><div class="muted">Штрихкод: '+esc(p.barcode||v)+' · Цена: '+esc(p.price)+' MDL</div></div></div>'+
-        '<h4>Остатки</h4>'+scanStockRows(p)+
+        '<h4>Остатки</h4><div id="scanStocks">'+scanStockRows(p)+'</div>'+
         '<div class="grid" style="margin-top:14px"><button id="scanMove" class="ghost">Запросить перемещение</button><button id="scanDiff" class="ghost">Есть расхождение</button></div><button id="scanNext" class="primary" style="width:100%;margin-top:10px">Дальше</button><div id="scanMoveBox" style="margin-top:10px"></div><div id="scanDiffBox" style="margin-top:10px"></div>';
+      if(p.stocks?.some(x=>x.quantity==null)){
+        msg($("scanInfo"),"Товар найден. Получаю остатки…");
+        refreshScanStocks(v);
+      }else{
+        msg($("scanInfo"),"Товар найден. Остатки загружены.","ok");
+      }
     }
     if($("scanMove"))$("scanMove").addEventListener("click",showScanMoveForm);
     if($("scanDiff"))$("scanDiff").addEventListener("click",showScanDiffForm);

@@ -684,6 +684,9 @@ function getCachedStocks(articleId) {
   const found = new Map((stockCache.byArticle.get(articleId) || []).map(x => [x.id, x]));
   return depots.map(d => found.get(d.id) || { id: d.id, name: d.name, quantity: 0 });
 }
+function getStockCacheState() {
+  return { ready: stockCache.ready, refreshing: stockCache.refreshing, at: stockCache.at };
+}
 
 function normalizeDateTime(s, end = false) {
   if (!s) return undefined;
@@ -1081,8 +1084,9 @@ function oauthChallenge(req) {
 }
 
 const stockApp = createStockApp({
-  getArticles, getDepots, getCachedStocks, refreshStockCache,
-  simpleDepot, simpleArticle, articleBarcodes, idOf
+  getArticles, getDepots, getCachedStocks, refreshStockCache, getStockCacheState,
+  simpleDepot, simpleArticle, articleBarcodes, idOf, apiGet,
+  modernSearchAdditionalBarcode, legacySearchAdditionalBarcode
 });
 
 const httpServer = createServer(async (req, res) => {

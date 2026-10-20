@@ -112,15 +112,7 @@ export function createStockApp(deps) {
       }
     }
 
-    const out=[];
-    for(const a of matched){
-      const p=shape(a,ds);
-      if(matched.length===1){
-        try{p.stocks=await liveStocksFor(a,ds);}catch{}
-      }
-      out.push(p);
-    }
-    return out;
+    return matched.map(a=>shape(a,ds));
   }
   async function findProduct(productId,barcode){
     const {rawArticles,ds}=await catalogs();
@@ -136,9 +128,7 @@ export function createStockApp(deps) {
       }
     }
     if(!a)return null;
-    const p=shape(a,ds);
-    try{p.stocks=await liveStocksFor(a,ds);}catch{}
-    return p;
+    return shape(a,ds);
   }
   function transferError(p,ds,fromId,toId,qty){
     if(!fromId||!toId||fromId===toId)return "Выберите разные точки ОТКУДА и КУДА.";

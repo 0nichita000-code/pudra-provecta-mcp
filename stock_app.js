@@ -5,7 +5,7 @@ import { fileURLToPath } from "node:url";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 export function createStockApp(deps) {
-  const { getArticles, getDepots, getCachedStocks, refreshStockCache, getStockCacheState, simpleDepot, simpleArticle, articleBarcodes, idOf, asArray, apiGet, modernSearchAdditionalBarcode, legacySearchAdditionalBarcode } = deps;
+  const { getArticles, getDepots, getCachedStocks, refreshStockCache, getStockCacheState, simpleDepot, simpleArticle, articleBarcodes, idOf, asArray, apiGet, salesRows, modernSearchAdditionalBarcode, legacySearchAdditionalBarcode } = deps;
   const ADMIN_PIN = process.env.STOCK_ADMIN_PIN || "2468";
   const STAFF_PIN = process.env.STOCK_STAFF_PIN || "1357";
   const transfers = [];
@@ -157,6 +157,25 @@ export function createStockApp(deps) {
     }
     if(req.method==="POST"&&url.pathname==="/stock/api/refresh"){
       await refreshStockCache(true);sendJson(res,200,{ok:true});return true;
+    }
+    if(req.method==="GET"&&url.pathname==="/stock/api/sales-today"){
+      if(!a.admin){sendJson(res,403,{error:"Только администратор"});return true;}
+      const rawDepots=await getDepots(false);
+      const depots=rawDepots.map(simpleDepot).filter(d=>{
+        const n=String(d.name||"").toUpperCase().trim();
+        return n==="PUDRA ORHEI"||n==="PUDRA GLODENI"||n==="PUDRA BALTI"||n==="PUDRA BALTI PINK";
+      });
+      const today=new Intl.DateTimeFormat("en-CA",{timeZone:"Europe/Chisinau",year:"numeric",month:"2-digit",day:"2-digit"}).format(new Date());
+      const items=[];
+      for(const d of depots){
+        const x=await salesRows(today,today,[d.id]);
+        const amount=x.rows.reduce((sum,r)=>sum+(Number(r.amount)||0),0);
+        const units=x.rows.reduce((sum,r)=>sum+(Number(r.quantity)||0),0);
+        const receipts=new Set(x.rows.map(r=>r.documentId).filter(Boolean)).size;
+        items.push({depotId:d.id,depotName:d.name,amount:Math.round(amount*100)/100,units:Math.round(units*100)/100,receipts});
+      }
+      const total={amount:items.reduce((s,x)=>s+x.amount,0),units:items.reduce((s,x)=>s+x.units,0),receipts:items.reduce((s,x)=>s+x.receipts,0)};
+      sendJson(res,200,{date:today,items,total});return true;
     }
     if(req.method==="POST"&&url.pathname==="/stock/api/transfers"){
       const b=await readBody(req);const p=await findProduct(b.productId,b.barcode);if(!p){sendJson(res,404,{error:"Товар не найден"});return true;}

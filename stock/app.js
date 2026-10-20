@@ -1,5 +1,5 @@
 (()=>{
-const S={user:"",role:"staff",pin:"",depots:[],product:null,stream:null,scanTimer:null,watchTimer:null,lastTransferId:0,lastDiffId:0,zxingControls:null,scanLocked:false,lastScanned:"",cameraIds:[],cameraIndex:0,inventory:[],invShown:0,invGroupName:""};
+const S={user:"",role:"staff",pin:"",depots:[],product:null,stream:null,scanTimer:null,watchTimer:null,lastTransferId:0,lastDiffId:0,zxingControls:null,scanLocked:false,lastScanned:"",cameraIds:[],cameraIndex:0,inventory:[],invShown:0,invGroupName:"",audioCtx:null};
 const $=id=>document.getElementById(id);
 const esc=s=>String(s??"").replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[m]));
 function headers(){return {"content-type":"application/json","x-pudra-pin":S.pin,"x-pudra-user":encodeURIComponent(S.user),"x-pudra-role":S.role};}
@@ -19,11 +19,36 @@ async function api(url,opt={}){
       if(i===0)await new Promise(r=>setTimeout(r,800));
     }
   }
-  if(last?.name==="AbortError")throw new Error("Сервер отвечает слишком долго. Повторите вход.");
+  if(last?.name==="AbortError")throw new Error("Сервер не успел ответить. Повторите действие через несколько секунд.");
   if(String(last?.message||"").includes("Failed to fetch"))throw new Error("Не удалось связаться с сервером. Обновите страницу и попробуйте ещё раз.");
   throw last;
 }
 function msg(el,text,type=""){el.innerHTML=text?'<div class="notice '+type+'">'+esc(text)+'</div>':"";}
+function initScanAudio(){
+  try{
+    if(!S.audioCtx){
+      const AC=window.AudioContext||window.webkitAudioContext;
+      if(AC)S.audioCtx=new AC();
+    }
+    if(S.audioCtx?.state==="suspended")S.audioCtx.resume().catch(()=>{});
+  }catch{}
+}
+function scanFeedback(){
+  try{if(navigator.vibrate)navigator.vibrate(80);}catch{}
+  try{
+    initScanAudio();
+    if(!S.audioCtx)return;
+    const o=S.audioCtx.createOscillator();
+    const g=S.audioCtx.createGain();
+    o.type="sine";
+    o.frequency.value=1150;
+    g.gain.setValueAtTime(0.0001,S.audioCtx.currentTime);
+    g.gain.exponentialRampToValueAtTime(0.12,S.audioCtx.currentTime+0.01);
+    g.gain.exponentialRampToValueAtTime(0.0001,S.audioCtx.currentTime+0.11);
+    o.connect(g);g.connect(S.audioCtx.destination);
+    o.start();o.stop(S.audioCtx.currentTime+0.12);
+  }catch{}
+}
 
 function pushNotice(title,body){try{if("Notification" in window&&Notification.permission==="granted")new Notification(title,{body});}catch{}}
 async function adminWatch(first=false){
@@ -324,6 +349,7 @@ async function handleScannedCode(v){
   if(S.scanLocked)return;
   S.scanLocked=true;
   S.lastScanned=v;
+  scanFeedback();
   msg($("scanInfo"),"Штрихкод найден: "+v+". Загружаю остатки…","ok");
   try{
     const p=await fetchScannedProduct(v);
@@ -358,6 +384,7 @@ async function handleScannedCode(v){
   }
 }
 async function startScan(){
+  initScanAudio();
   if(S.stream||S.zxingControls){
     S.scanLocked=false;
     $("scanResult").classList.add("hidden");

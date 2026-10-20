@@ -53,7 +53,18 @@ function startAdminWatch(){
   S.watchTimer=setInterval(()=>adminWatch(false),15000);
 }
 
-function tab(id){document.querySelectorAll(".tabPanel").forEach(x=>x.classList.add("hidden"));$(id).classList.remove("hidden");document.querySelectorAll(".tab").forEach(x=>x.classList.toggle("active",x.dataset.tab===id));if(id==="adminTab")loadRequests();if(id==="diffTab")loadDiffs();if(id==="monitorTab")loadMonitoring();if(id==="inventoryTab"&&!S.inventory.length)loadInventory();}
+function tab(id){
+  document.querySelectorAll(".tabPanel").forEach(x=>x.classList.add("hidden"));
+  $(id).classList.remove("hidden");
+  document.querySelectorAll(".tab").forEach(x=>x.classList.toggle("active",x.dataset.tab===id));
+  if(id==="adminTab")loadRequests();
+  if(id==="diffTab")loadDiffs();
+  if(id==="monitorTab")loadMonitoring();
+  if(id==="inventoryTab"&&!S.inventory.length)loadInventory();
+  if(id==="scanTab"){
+    try{if(localStorage.getItem("pudraCameraReady")==="1"&&!S.stream&&!S.zxingControls)startScan();}catch{}
+  }
+}
 function saveLogin(){
   try{
     localStorage.setItem("pudraStockLogin",JSON.stringify({user:S.user,role:S.role,pin:S.role==="admin"?S.pin:""}));
@@ -390,6 +401,7 @@ async function startScan(){
         if(caps?.focusMode?.includes?.("continuous"))adv.focusMode="continuous";
         if(Object.keys(adv).length)await track.applyConstraints({advanced:[adv]});
       }catch{}
+      try{localStorage.setItem("pudraCameraReady","1");}catch{}
       msg($("scanInfo"),"Камера включена. После результата нажимайте «Дальше».","ok");
       return;
     }

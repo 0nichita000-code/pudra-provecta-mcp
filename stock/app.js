@@ -35,6 +35,13 @@ function initScanAudio(){
 }
 function scanFeedback(){
   try{if(navigator.vibrate)navigator.vibrate(80);}catch{}
+
+function flashScanFrame(){
+  const f=$("scanFrame");
+  if(!f)return;
+  f.classList.add("ok");
+  setTimeout(()=>f.classList.remove("ok"),700);
+}
   try{
     initScanAudio();
     if(!S.audioCtx)return;
@@ -327,7 +334,7 @@ async function stopScan(){
   S.zxingControls=null;
   if(S.stream){S.stream.getTracks().forEach(t=>t.stop());S.stream=null;}
   S.scanLocked=false;
-  $("video").classList.add("hidden");
+  $("scanVideoWrap").classList.add("hidden");
   $("scanResult").classList.add("hidden");
 }
 function scanStockRows(p){
@@ -362,6 +369,7 @@ async function handleScannedCode(v){
   S.scanLocked=true;
   S.lastScanned=v;
   scanFeedback();
+  flashScanFrame();
   msg($("scanInfo"),"Штрихкод найден: "+v+". Загружаю остатки…","ok");
   try{
     const p=await fetchScannedProduct(v);
@@ -411,7 +419,7 @@ async function startScan(){
   }
   msg($("scanInfo"),"Запускаю сканер…");
   try{
-    $("video").classList.remove("hidden");
+    $("scanVideoWrap").classList.remove("hidden");
 
     if(window.ZXingBrowser){
       const reader=new ZXingBrowser.BrowserMultiFormatReader();

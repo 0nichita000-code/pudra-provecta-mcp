@@ -645,7 +645,7 @@ async function getArticles(force = false) {
 
 async function refreshStockCache(force = false) {
   if (stockCache.refreshing) return;
-  if (!force && stockCache.ready && Date.now() - stockCache.at < 5 * 60 * 1000) return;
+  if (!force && stockCache.ready && Date.now() - stockCache.at < 2 * 60 * 1000) return;
 
   stockCache.refreshing = true;
   try {
@@ -1250,5 +1250,5 @@ httpServer.listen(PORT, "0.0.0.0", () => {
   Promise.all([getArticles(false), getDepots(false)])
     .then(() => refreshStockCache(true))
     .catch(e => console.error("Warm-up failed", e?.message || e));
-  setInterval(() => refreshStockCache(false).catch(() => {}), 5 * 60 * 1000).unref();
+  setInterval(() => refreshStockCache(false).catch(() => {}), 2 * 60 * 1000).unref();
 });

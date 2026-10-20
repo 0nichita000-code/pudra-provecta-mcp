@@ -1121,7 +1121,7 @@ function oauthChallenge(req) {
 
 const stockApp = createStockApp({
   getArticles, getDepots, getCachedStocks, refreshStockCache, getStockCacheState,
-  simpleDepot, simpleArticle, articleBarcodes, idOf, asArray, apiGet,
+  simpleDepot, simpleArticle, articleBarcodes, idOf, asArray, apiGet, salesRows,
   modernSearchAdditionalBarcode, legacySearchAdditionalBarcode
 });
 

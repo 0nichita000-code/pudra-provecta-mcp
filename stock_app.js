@@ -115,7 +115,7 @@ export function createStockApp(deps) {
     const out=[];
     for(const a of matched){
       const p=shape(a,ds);
-      if(exact && matched.length===1){
+      if(matched.length===1){
         try{p.stocks=await liveStocksFor(a,ds);}catch{}
       }
       out.push(p);

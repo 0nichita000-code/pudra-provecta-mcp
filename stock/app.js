@@ -53,14 +53,48 @@ function startAdminWatch(){
   S.watchTimer=setInterval(()=>adminWatch(false),15000);
 }
 
-function tab(id){document.querySelectorAll(".tabPanel").forEach(x=>x.classList.add("hidden"));$(id).classList.remove("hidden");document.querySelectorAll(".tab").forEach(x=>x.classList.toggle("active",x.dataset.tab===id));if(id==="adminTab")loadRequests();if(id==="diffTab")loadDiffs();if(id==="inventoryTab"&&!S.inventory.length)loadInventory();}
-async function login(){
-  S.user=$("userName").value.trim();S.role=$("role").value;S.pin=$("pin").value;
-  if(!S.user||!S.pin)return msg($("loginMsg"),"Введите имя и PIN","bad");
-  try{const m=await api("/stock/api/meta");S.depots=m.depots;$("login").classList.add("hidden");$("app").classList.remove("hidden");$("who").textContent=S.user+(S.role==="admin"?" · админ":"");document.querySelectorAll(".adminOnly").forEach(x=>x.classList.toggle("hidden",S.role!=="admin"));msg($("loginMsg"),"");if(S.role==="admin")startAdminWatch();}
-  catch(e){msg($("loginMsg"),e.message,"bad");}
+function tab(id){document.querySelectorAll(".tabPanel").forEach(x=>x.classList.add("hidden"));$(id).classList.remove("hidden");document.querySelectorAll(".tab").forEach(x=>x.classList.toggle("active",x.dataset.tab===id));if(id==="adminTab")loadRequests();if(id==="diffTab")loadDiffs();if(id==="monitorTab")loadMonitoring();if(id==="inventoryTab"&&!S.inventory.length)loadInventory();}
+function saveLogin(){
+  try{
+    localStorage.setItem("pudraStockLogin",JSON.stringify({user:S.user,role:S.role,pin:S.role==="admin"?S.pin:""}));
+  }catch{}
 }
-function stockRows(p){return p.stocks.map(x=>'<div class="stock"><span>'+esc(x.depotName)+'</span><span class="qty '+(Number(x.quantity)<=0?"zero":"")+'">'+esc(x.quantity)+'</span></div>').join("");}
+function updatePinVisibility(){
+  const admin=$("role").value==="admin";
+  $("pinWrap").classList.toggle("hidden",!admin);
+  if(!admin)$("pin").value="";
+}
+async function login(auto=false){
+  S.user=$("userName").value.trim();S.role=$("role").value;S.pin=S.role==="admin"?$("pin").value:"";
+  if(!S.user)return msg($("loginMsg"),"Введите имя","bad");
+  if(S.role==="admin"&&!S.pin)return msg($("loginMsg"),"Введите PIN администратора","bad");
+  try{
+    const m=await api("/stock/api/meta");
+    S.depots=m.depots;
+    $("login").classList.add("hidden");
+    $("app").classList.remove("hidden");
+    $("who").textContent=S.user+(S.role==="admin"?" · админ":"");
+    document.querySelectorAll(".adminOnly").forEach(x=>x.classList.toggle("hidden",S.role!=="admin"));
+    msg($("loginMsg"),"");
+    saveLogin();
+    if(S.role==="admin")startAdminWatch();
+  }catch(e){
+    if(auto){try{localStorage.removeItem("pudraStockLogin");}catch{}}
+    msg($("loginMsg"),e.message,"bad");
+  }
+}
+async function restoreLogin(){
+  try{
+    const saved=JSON.parse(localStorage.getItem("pudraStockLogin")||"null");
+    if(!saved?.user)return;
+    $("userName").value=saved.user;
+    $("role").value=saved.role||"staff";
+    $("pin").value=saved.pin||"";
+    updatePinVisibility();
+    await login(true);
+  }catch{}
+}
+function stockRows(p){return p.stocks.map(x=>{const q=x.quantity==null?"обновляется…":x.quantity;return '<div class="stock"><span>'+esc(x.depotName)+'</span><span class="qty '+(x.quantity!=null&&Number(x.quantity)<=0?"zero":"")+'">'+esc(q)+'</span></div>';}).join("");}
 function optionList(selected=""){return '<option value="">Выберите точку</option>'+S.depots.map(d=>'<option value="'+esc(d.id)+'" '+(d.id===selected?"selected":"")+'>'+esc(d.name)+'</option>').join("");}
 function showProduct(p){
   S.product=p;
@@ -194,6 +228,29 @@ function renderInventory(reset=false){
     showProduct(p);
   }));
 }
+async function loadMonitoring(){
+  $("monitorSummary").innerHTML='<div class="muted">Загружаю…</div>';
+  $("monitorDepots").innerHTML="";
+  try{
+    const d=await api("/stock/api/monitoring");
+    const age=d.cache?.at?Math.max(0,Math.round((Date.now()-Number(d.cache.at))/60000)):null;
+    $("monitorSummary").innerHTML=
+      '<div class="grid">'+
+      '<div class="card" style="margin:0"><div class="muted">Товаров</div><div class="name" style="font-size:26px">'+esc(d.products)+'</div></div>'+
+      '<div class="card" style="margin:0"><div class="muted">Активные перемещения</div><div class="name" style="font-size:26px">'+esc(d.activeTransfers)+'</div></div>'+
+      '<div class="card" style="margin:0"><div class="muted">Новые расхождения</div><div class="name" style="font-size:26px">'+esc(d.openDiscrepancies)+'</div></div>'+
+      '<div class="card" style="margin:0"><div class="muted">Остатки Provecta</div><div class="name">'+(d.cache?.ready?"Готовы":"Обновляются")+'</div><div class="muted">'+(age==null?"":("обновлены "+age+" мин. назад"))+'</div></div>'+
+      '</div>';
+    $("monitorDepots").innerHTML='<h3>По точкам</h3>'+d.perDepot.map(x=>
+      '<div class="card"><div class="name">'+esc(x.depotName)+'</div>'+
+      '<div class="stock"><span>Позиций в наличии</span><span class="qty">'+esc(x.positive)+'</span></div>'+
+      '<div class="stock"><span>Нулевых позиций</span><span class="qty">'+esc(x.zero)+'</span></div>'+
+      '<div class="stock"><span>Всего единиц товара</span><span class="qty">'+esc(Math.round(x.totalQty))+'</span></div></div>'
+    ).join("");
+  }catch(e){
+    $("monitorSummary").innerHTML='<div class="notice bad">'+esc(e.message)+'</div>';
+  }
+}
 async function loadRequests(){
   try{
     const d=await api("/stock/api/transfers");const groups={};
@@ -236,7 +293,7 @@ async function stopScan(){
   $("scanResult").classList.add("hidden");
 }
 function scanStockRows(p){
-  return p.stocks.map(x=>'<div class="stock"><span>'+esc(x.depotName)+'</span><span class="qty '+(Number(x.quantity)<=0?"zero":"")+'">'+esc(x.quantity)+'</span></div>').join("");
+  return p.stocks.map(x=>{const q=x.quantity==null?"обновляется…":x.quantity;return '<div class="stock"><span>'+esc(x.depotName)+'</span><span class="qty '+(x.quantity!=null&&Number(x.quantity)<=0?"zero":"")+'">'+esc(q)+'</span></div>';}).join("");
 }
 async function handleScannedCode(v){
   if(S.scanLocked)return;
@@ -294,7 +351,9 @@ async function startScan(){
         try{
           const probe=await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:"environment"}},audio:false});
           probe.getTracks().forEach(t=>t.stop());
-          const devs=(await navigator.mediaDevices.enumerateDevices()).filter(d=>d.kind==="videoinput");
+          const all=(await navigator.mediaDevices.enumerateDevices()).filter(d=>d.kind==="videoinput");
+          const rear=all.filter(d=>!/front|user|selfie|facing front/i.test(d.label||""));
+          const devs=rear.length?rear:all;
           const score=d=>{
             const n=(d.label||"").toLowerCase();
             let s=0;
@@ -362,8 +421,9 @@ async function startScan(){
 async function switchCamera(){
   try{
     if(!S.cameraIds.length){
-      const devs=(await navigator.mediaDevices.enumerateDevices()).filter(d=>d.kind==="videoinput");
-      S.cameraIds=devs.map(d=>d.deviceId);
+      const all=(await navigator.mediaDevices.enumerateDevices()).filter(d=>d.kind==="videoinput");
+      const rear=all.filter(d=>!/front|user|selfie|facing front/i.test(d.label||""));
+      S.cameraIds=(rear.length?rear:all).map(d=>d.deviceId);
     }
     if(S.cameraIds.length<2){
       msg($("scanInfo"),"На телефоне доступна только одна камера для браузера.","bad");
@@ -377,7 +437,9 @@ async function switchCamera(){
   }
 }
 
-$("loginBtn").addEventListener("click",login);$("searchBtn").addEventListener("click",()=>search());$("search").addEventListener("keydown",e=>{if(e.key==="Enter")search();});$("refreshBtn").addEventListener("click",refresh);
-$("startScan").addEventListener("click",startScan);$("switchCamera").addEventListener("click",switchCamera);$("stopScan").addEventListener("click",stopScan);$("invReload").addEventListener("click",()=>{S.inventory=[];loadInventory();});$("groupSearch").addEventListener("input",renderGroupList);$("invBack").addEventListener("click",()=>{$("inventoryHome").classList.remove("hidden");$("inventoryGroupView").classList.add("hidden");renderGroupList();});$("invDepot").addEventListener("change",()=>renderInventory(true));$("invSearch").addEventListener("input",()=>renderInventory(true));$("invMore").addEventListener("click",()=>renderInventory(false));$("reloadReq").addEventListener("click",loadRequests);$("reloadDiff").addEventListener("click",loadDiffs);
+$("loginBtn").addEventListener("click",()=>login(false));$("role").addEventListener("change",updatePinVisibility);$("searchBtn").addEventListener("click",()=>search());$("search").addEventListener("keydown",e=>{if(e.key==="Enter")search();});$("refreshBtn").addEventListener("click",refresh);
+$("startScan").addEventListener("click",startScan);$("switchCamera").addEventListener("click",switchCamera);$("stopScan").addEventListener("click",stopScan);$("invReload").addEventListener("click",()=>{S.inventory=[];loadInventory();});$("groupSearch").addEventListener("input",renderGroupList);$("invBack").addEventListener("click",()=>{$("inventoryHome").classList.remove("hidden");$("inventoryGroupView").classList.add("hidden");renderGroupList();});$("invDepot").addEventListener("change",()=>renderInventory(true));$("invSearch").addEventListener("input",()=>renderInventory(true));$("invMore").addEventListener("click",()=>renderInventory(false));$("reloadReq").addEventListener("click",loadRequests);$("reloadDiff").addEventListener("click",loadDiffs);$("reloadMonitor").addEventListener("click",loadMonitoring);
 document.querySelectorAll(".tab").forEach(b=>b.addEventListener("click",()=>tab(b.dataset.tab)));
+updatePinVisibility();
+restoreLogin();
 })();

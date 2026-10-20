@@ -103,6 +103,7 @@ function tab(id){
   document.querySelectorAll(".tabPanel").forEach(x=>x.classList.add("hidden"));
   $(id).classList.remove("hidden");
   document.querySelectorAll(".tab").forEach(x=>x.classList.toggle("active",x.dataset.tab===id));
+  if(id==="salesTab")loadSales();
   if(id==="adminTab")loadRequests();
   if(id==="diffTab")loadDiffs();
   if(id==="monitorTab")loadMonitoring();
@@ -284,6 +285,27 @@ function renderInventory(reset=false){
     tab("searchTab");
     showProduct(p);
   }));
+}
+async function loadSales(){
+  $("salesSummary").innerHTML='<div class="muted">Загружаю продажи…</div>';
+  $("salesStores").innerHTML="";
+  try{
+    const d=await api("/stock/api/sales-today");
+    $("salesDate").textContent="Дата: "+d.date;
+    const money=n=>new Intl.NumberFormat("ru-RU",{maximumFractionDigits:2}).format(Number(n)||0)+" MDL";
+    $("salesSummary").innerHTML=
+      '<div class="card" style="margin:0;background:#111;color:#fff">'+
+      '<div class="muted" style="color:#bbb">ВСЯ СЕТЬ СЕГОДНЯ</div>'+
+      '<div class="name" style="font-size:30px;margin-top:4px">'+money(d.total.amount)+'</div>'+
+      '<div class="muted" style="color:#ddd;margin-top:4px">'+esc(d.total.receipts)+' чеков · '+esc(d.total.units)+' шт.</div></div>';
+    $("salesStores").innerHTML=d.items.map(x=>
+      '<div class="card" style="margin-bottom:10px">'+
+      '<div class="row"><div class="grow name">'+esc(x.depotName)+'</div><div class="name" style="font-size:22px">'+money(x.amount)+'</div></div>'+
+      '<div class="muted" style="margin-top:6px">'+esc(x.receipts)+' чеков · '+esc(x.units)+' шт. продано</div></div>'
+    ).join("");
+  }catch(e){
+    $("salesSummary").innerHTML='<div class="notice bad">'+esc(e.message)+'</div>';
+  }
 }
 async function loadMonitoring(){
   $("monitorSummary").innerHTML='<div class="muted">Загружаю…</div>';
@@ -517,7 +539,7 @@ async function switchCamera(){
 }
 
 $("loginBtn").addEventListener("click",()=>login(false));$("role").addEventListener("change",updatePinVisibility);$("searchBtn").addEventListener("click",()=>search());$("search").addEventListener("keydown",e=>{if(e.key==="Enter")search();});$("refreshBtn").addEventListener("click",refresh);
-$("startScan").addEventListener("click",startScan);$("stopScan").addEventListener("click",stopScan);$("invReload").addEventListener("click",()=>{S.inventory=[];loadInventory();});$("groupSearch").addEventListener("input",renderGroupList);$("invBack").addEventListener("click",()=>{$("inventoryHome").classList.remove("hidden");$("inventoryGroupView").classList.add("hidden");renderGroupList();});$("invDepot").addEventListener("change",()=>renderInventory(true));$("invSearch").addEventListener("input",()=>renderInventory(true));$("invMore").addEventListener("click",()=>renderInventory(false));$("reloadReq").addEventListener("click",loadRequests);$("reloadDiff").addEventListener("click",loadDiffs);$("reloadMonitor").addEventListener("click",loadMonitoring);
+$("startScan").addEventListener("click",startScan);$("stopScan").addEventListener("click",stopScan);$("invReload").addEventListener("click",()=>{S.inventory=[];loadInventory();});$("groupSearch").addEventListener("input",renderGroupList);$("invBack").addEventListener("click",()=>{$("inventoryHome").classList.remove("hidden");$("inventoryGroupView").classList.add("hidden");renderGroupList();});$("invDepot").addEventListener("change",()=>renderInventory(true));$("invSearch").addEventListener("input",()=>renderInventory(true));$("invMore").addEventListener("click",()=>renderInventory(false));$("reloadSales").addEventListener("click",loadSales);$("reloadReq").addEventListener("click",loadRequests);$("reloadDiff").addEventListener("click",loadDiffs);$("reloadMonitor").addEventListener("click",loadMonitoring);
 document.querySelectorAll(".tab").forEach(b=>b.addEventListener("click",()=>tab(b.dataset.tab)));
 updatePinVisibility();
 restoreLogin();

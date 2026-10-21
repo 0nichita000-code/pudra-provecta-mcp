@@ -166,16 +166,23 @@ export function createStockApp(deps) {
         return n==="PUDRA ORHEI"||n==="PUDRA GLODENI"||n==="PUDRA BALTI"||n==="PUDRA BALTI PINK";
       });
       const today=new Intl.DateTimeFormat("en-CA",{timeZone:"Europe/Chisinau",year:"numeric",month:"2-digit",day:"2-digit"}).format(new Date());
-      const items=[];
-      for(const d of depots){
-        const x=await salesRows(today,today,[d.id]);
-        const amount=x.rows.reduce((sum,r)=>sum+(Number(r.amount)||0),0);
-        const units=x.rows.reduce((sum,r)=>sum+(Number(r.quantity)||0),0);
-        const receipts=new Set(x.rows.map(r=>r.documentId).filter(Boolean)).size;
-        items.push({depotId:d.id,depotName:d.name,amount:Math.round(amount*100)/100,units:Math.round(units*100)/100,receipts});
+      const dateFrom=today+"T00:00:00.000Z";
+      const dateTo=today+"T23:59:59.999Z";
+      try{
+        const items=[];
+        for(const d of depots){
+          const x=await salesRows(dateFrom,dateTo,[d.id]);
+          const amount=x.rows.reduce((sum,r)=>sum+(Number(r.amount)||0),0);
+          const units=x.rows.reduce((sum,r)=>sum+(Number(r.quantity)||0),0);
+          const receipts=new Set(x.rows.map(r=>r.documentId).filter(Boolean)).size;
+          items.push({depotId:d.id,depotName:d.name,amount:Math.round(amount*100)/100,units:Math.round(units*100)/100,receipts});
+        }
+        const total={amount:items.reduce((s,x)=>s+x.amount,0),units:items.reduce((s,x)=>s+x.units,0),receipts:items.reduce((s,x)=>s+x.receipts,0)};
+        sendJson(res,200,{date:today,items,total});return true;
+      }catch(e){
+        console.error("sales-today failed",e?.message||e);
+        sendJson(res,502,{error:"Не удалось получить продажи из Provecta. Попробуйте обновить через несколько секунд."});return true;
       }
-      const total={amount:items.reduce((s,x)=>s+x.amount,0),units:items.reduce((s,x)=>s+x.units,0),receipts:items.reduce((s,x)=>s+x.receipts,0)};
-      sendJson(res,200,{date:today,items,total});return true;
     }
     if(req.method==="POST"&&url.pathname==="/stock/api/transfers"){
       const b=await readBody(req);const p=await findProduct(b.productId,b.barcode);if(!p){sendJson(res,404,{error:"Товар не найден"});return true;}

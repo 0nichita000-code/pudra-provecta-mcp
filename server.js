@@ -505,8 +505,22 @@ async function modernSearchAdditionalBarcode(barcode) {
         if (canonical) {
           return {
             article: { ...canonical, ArticleBarcodes: [...new Set([...articleBarcodes(canonical), barcode])] },
+            hidden: false,
             diagnostics
           };
+        }
+        try {
+          const loaded = await legacyArticleLoad(articleId);
+          const hiddenArticle = findArticleWithBarcode(loaded, barcode) || loaded?.Article || loaded?.article || loaded;
+          if (hiddenArticle && idOf(hiddenArticle)) {
+            return {
+              article: { ...hiddenArticle, ArticleBarcodes: [...new Set([...articleBarcodes(hiddenArticle), barcode])] },
+              hidden: true,
+              diagnostics
+            };
+          }
+        } catch (e) {
+          diagnostics.push({ method: "ArticleLoad", articleId, status: e.status || null, error: String(e.message || e).slice(0,180) });
         }
       }
     } catch (e) {
@@ -560,7 +574,16 @@ async function legacySearchAdditionalBarcode(barcode) {
       diagnostics.push({ method: "ArticleBarcodeSearch", keys: Object.keys(body.articleBarcodePredicate), foundRecord: !!record, articleId, authVariant: result?.authVariant ?? null });
       if (articleId) {
         const canonical = articleCache.byId.get(articleId);
-        if (canonical) return { article: { ...canonical, ArticleBarcodes: [...new Set([...articleBarcodes(canonical), barcode])] }, diagnostics };
+        if (canonical) return { article: { ...canonical, ArticleBarcodes: [...new Set([...articleBarcodes(canonical), barcode])] }, hidden:false, diagnostics };
+        try {
+          const loaded = await legacyArticleLoad(articleId);
+          const hiddenArticle = findArticleWithBarcode(loaded, barcode) || loaded?.Article || loaded?.article || loaded;
+          if (hiddenArticle && idOf(hiddenArticle)) {
+            return { article: { ...hiddenArticle, ArticleBarcodes: [...new Set([...articleBarcodes(hiddenArticle), barcode])] }, hidden:true, diagnostics };
+          }
+        } catch (e) {
+          diagnostics.push({ method:"ArticleLoad", articleId, status:e.status||null, error:String(e.message||e).slice(0,180) });
+        }
       }
     } catch (e) {
       diagnostics.push({ method: "ArticleBarcodeSearch", keys: Object.keys(body.articleBarcodePredicate), status: e.status || null, error: String(e.message || e).slice(0, 180) });

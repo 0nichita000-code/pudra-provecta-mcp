@@ -76,7 +76,7 @@ export function createStockApp(deps) {
     const x=simpleArticle(a);
     return {...x,group:deriveGroup(a),stocks:stocksFor(a,ds)};
   }
-  async function search(q){
+  async function search(q,includeHidden=false){
     const s=String(q||"").trim().toLowerCase();
     const {rawArticles,ds}=await catalogs();
 
@@ -93,20 +93,21 @@ export function createStockApp(deps) {
       return !s ? true : (exact?vals.includes(s):vals.some(v=>v.includes(s)));
     }).slice(0,!s?6000:(exact?1:50));
 
+    let hiddenMatch=false;
     if(exact && matched.length===0){
       try{
         const modern=await modernSearchAdditionalBarcode(s);
-        if(modern?.article) matched=[modern.article];
+        if(modern?.article && (!modern.hidden || includeHidden)){ matched=[modern.article]; hiddenMatch=!!modern.hidden; }
       }catch{}
       if(matched.length===0){
         try{
           const legacy=await legacySearchAdditionalBarcode(s);
-          if(legacy?.article) matched=[legacy.article];
+          if(legacy?.article && (!legacy.hidden || includeHidden)){ matched=[legacy.article]; hiddenMatch=!!legacy.hidden; }
         }catch{}
       }
     }
 
-    return matched.map(a=>shape(a,ds));
+    return matched.map(x=>({...shape(x,ds),hidden:hiddenMatch}));
   }
   async function findProduct(productId,barcode){
     const {rawArticles,ds}=await catalogs();
@@ -153,7 +154,7 @@ export function createStockApp(deps) {
       const rawDepots=await getDepots(false);const ds=rawDepots.map(simpleDepot).filter(d=>d.id && allowedDepotName(d.name));sendJson(res,200,{depots:ds,user:a.user,role:a.role});return true;
     }
     if(req.method==="GET"&&url.pathname==="/stock/api/search"){
-      const products=await search(url.searchParams.get("q")||"");sendJson(res,200,{products});return true;
+      const products=await search(url.searchParams.get("q")||"",a.admin);sendJson(res,200,{products});return true;
     }
     if(req.method==="POST"&&url.pathname==="/stock/api/refresh"){
       await refreshStockCache(true);sendJson(res,200,{ok:true});return true;

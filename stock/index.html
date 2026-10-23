@@ -20,12 +20,16 @@ input,select,textarea{width:100%;padding:13px;border:1px solid #d7d7df;border-ra
 .tabs{display:flex;gap:8px;overflow:auto;padding-bottom:8px}.tab{white-space:nowrap}.tab.active{background:#111;color:#fff}
 .notice{padding:10px 12px;border-radius:12px;background:#fff4cc;color:#5d4800;font-size:14px}.ok{background:#e8f5e9;color:#176b2c}.bad{background:#fdecea;color:var(--bad)}
 .route{font-weight:900;margin:14px 0 6px}.req{border-left:4px solid var(--pink);padding-left:10px;margin:10px 0}
-video{width:100%;border-radius:16px;background:#000;max-height:420px;display:block}
-.scanVideoWrap{position:relative;margin-top:10px}
+video{width:100%;height:210px;border-radius:16px;background:#000;object-fit:cover;display:block}
+.scanVideoWrap{position:relative;margin:10px auto 0;max-width:430px}
+.scanVideoWrap.compact video{height:118px}
+.productTop{display:grid;grid-template-columns:92px 1fr;gap:12px;align-items:start}
+.productPhoto{width:92px;height:92px;border-radius:14px;border:1px solid var(--line);background:#f3f3f6;display:flex;align-items:center;justify-content:center;overflow:hidden;font-size:12px;color:var(--muted);font-weight:800;text-align:center}
+.productPhoto img{width:100%;height:100%;object-fit:contain;display:block;background:#fff}
 .scanFrame{position:absolute;left:12%;right:12%;top:38%;height:24%;border:3px solid rgba(255,255,255,.65);border-radius:14px;pointer-events:none;transition:border-color .12s,box-shadow .12s,transform .12s;z-index:2}
 .scanFrame.ok{border-color:#19c763;box-shadow:0 0 0 3px rgba(25,199,99,.25),0 0 22px rgba(25,199,99,.85);transform:scale(1.015)}
 .scanFrame.hidden{display:none!important}
-@media(max-width:640px){.grid{grid-template-columns:1fr}.wrap{padding:10px}.card{border-radius:14px;padding:14px}}
+@media(max-width:640px){.grid{grid-template-columns:1fr}.wrap{padding:10px}.card{border-radius:14px;padding:14px}video{height:175px}.scanVideoWrap.compact video{height:100px}.productTop{grid-template-columns:78px 1fr}.productPhoto{width:78px;height:78px}}
 .bootSplash{position:fixed;inset:0;z-index:9999;background:#111;color:#fff;display:flex;align-items:center;justify-content:center;padding:28px;transition:opacity .3s ease}
 .bootSplash.ready{opacity:0}.bootInner{width:min(420px,100%);text-align:center}.bootLogo{font-size:38px;font-weight:950;letter-spacing:1.2px}.bootLogo b{color:var(--pink)}.bootLabel{margin-top:22px;font-size:18px;font-weight:800}.bootDetail{margin-top:7px;color:#a9a9b2;font-size:13px}.bootBar{height:5px;background:#2b2b30;border-radius:999px;overflow:hidden;margin-top:24px}.bootBar span{display:block;height:100%;width:38%;border-radius:999px;background:var(--pink);animation:bootmove 1.15s ease-in-out infinite}@keyframes bootmove{0%{transform:translateX(-110%)}50%{transform:translateX(120%)}100%{transform:translateX(300%)}}
 </style>
@@ -79,11 +83,11 @@ video{width:100%;border-radius:16px;background:#000;max-height:420px;display:blo
     <section id="scanTab" class="tabPanel hidden">
       <div class="card">
         <div id="scanInfo" class="notice">Нажмите «Запустить камеру» один раз. После сканирования нажимайте «Дальше» — камера останется включённой.</div>
+        <div id="scanResult" class="card hidden" style="margin-top:12px"></div>
         <div id="scanVideoWrap" class="scanVideoWrap hidden">
           <video id="video" playsinline muted></video>
           <div id="scanFrame" class="scanFrame"></div>
         </div>
-        <div id="scanResult" class="card hidden" style="margin-top:12px"></div>
         <div class="row" style="margin-top:10px">
           <button id="startScan" class="primary">Запустить камеру</button>
           <button id="stopScan" class="ghost">Остановить</button>
@@ -160,6 +164,6 @@ setTimeout(function(){
   if(s){s.classList.add("ready");setTimeout(function(){s.classList.add("hidden")},320);}
 },2500);
 </script>
-<script src="./app.js?v=20261023-1646"></script>
+<script src="./app.js?v=20261023-1655"></script>
 </body>
 </html>

@@ -26,9 +26,19 @@ video{width:100%;border-radius:16px;background:#000;max-height:420px;display:blo
 .scanFrame.ok{border-color:#19c763;box-shadow:0 0 0 3px rgba(25,199,99,.25),0 0 22px rgba(25,199,99,.85);transform:scale(1.015)}
 .scanFrame.hidden{display:none!important}
 @media(max-width:640px){.grid{grid-template-columns:1fr}.wrap{padding:10px}.card{border-radius:14px;padding:14px}}
+.bootSplash{position:fixed;inset:0;z-index:9999;background:#111;color:#fff;display:flex;align-items:center;justify-content:center;padding:28px;transition:opacity .3s ease}
+.bootSplash.ready{opacity:0}.bootInner{width:min(420px,100%);text-align:center}.bootLogo{font-size:38px;font-weight:950;letter-spacing:1.2px}.bootLogo b{color:var(--pink)}.bootLabel{margin-top:22px;font-size:18px;font-weight:800}.bootDetail{margin-top:7px;color:#a9a9b2;font-size:13px}.bootBar{height:5px;background:#2b2b30;border-radius:999px;overflow:hidden;margin-top:24px}.bootBar span{display:block;height:100%;width:38%;border-radius:999px;background:var(--pink);animation:bootmove 1.15s ease-in-out infinite}@keyframes bootmove{0%{transform:translateX(-110%)}50%{transform:translateX(120%)}100%{transform:translateX(300%)}}
 </style>
 </head>
 <body>
+<div id="bootSplash" class="bootSplash">
+  <div class="bootInner">
+    <div class="bootLogo">PUDRA <b>STOCK</b></div>
+    <div id="bootLabel" class="bootLabel">Подключаемся к базе...</div>
+    <div id="bootDetail" class="bootDetail">Проверяем товары и остатки</div>
+    <div class="bootBar"><span></span></div>
+  </div>
+</div>
 <header><div class="brand">PUDRA <b>STOCK</b></div><div id="who" class="muted" style="color:#ddd"></div></header>
 <div class="wrap">
   <section id="login" class="card">
@@ -143,7 +153,7 @@ video{width:100%;border-radius:16px;background:#000;max-height:420px;display:blo
     </section>
   </main>
 </div>
-<script src="/stock/zxing.js"></script>
-<script src="/stock/app.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@zxing/browser@0.1.5/umd/zxing-browser.min.js"></script>
+<script src="./app.js"></script>
 </body>
 </html>

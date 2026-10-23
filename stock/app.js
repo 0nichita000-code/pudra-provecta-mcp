@@ -4,23 +4,29 @@ const $=id=>document.getElementById(id);
 const esc=s=>String(s??"").replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[m]));
 function headers(){return {"content-type":"application/json","x-pudra-pin":S.pin,"x-pudra-user":encodeURIComponent(S.user),"x-pudra-role":S.role};}
 async function api(url,opt={}){
+  const timeoutMs=Number(opt.timeoutMs)||20000;
+  const retries=Number.isInteger(opt.retries)?Math.max(0,opt.retries):1;
+  const fetchOpt={...opt};
+  delete fetchOpt.timeoutMs;
+  delete fetchOpt.retries;
   let last;
-  for(let i=0;i<2;i++){
+  for(let i=0;i<=retries;i++){
+    const ctl=new AbortController();
+    const t=setTimeout(()=>ctl.abort(),timeoutMs);
     try{
-      const ctl=new AbortController();
-      const t=setTimeout(()=>ctl.abort(),20000);
-      const r=await fetch(url,{...opt,signal:ctl.signal,headers:{...headers(),...(opt.headers||{})}});
-      clearTimeout(t);
+      const r=await fetch(url,{...fetchOpt,signal:ctl.signal,headers:{...headers(),...(fetchOpt.headers||{})}});
       const d=await r.json().catch(()=>({}));
       if(!r.ok)throw new Error(d.error||("Ошибка "+r.status));
       return d;
     }catch(e){
       last=e;
-      if(i===0)await new Promise(r=>setTimeout(r,800));
+      if(i<retries)await new Promise(r=>setTimeout(r,Math.min(400,Math.max(100,timeoutMs/10))));
+    }finally{
+      clearTimeout(t);
     }
   }
-  if(last?.name==="AbortError")throw new Error("Сервер не успел ответить. Повторите действие через несколько секунд.");
-  if(String(last?.message||"").includes("Failed to fetch"))throw new Error("Не удалось связаться с сервером. Обновите страницу и попробуйте ещё раз.");
+  if(last?.name==="AbortError")throw new Error("Сервер не успел ответить.");
+  if(String(last?.message||"").includes("Failed to fetch"))throw new Error("Не удалось связаться с сервером.");
   throw last;
 }
 function msg(el,text,type=""){el.innerHTML=text?'<div class="notice '+type+'">'+esc(text)+'</div>':"";}
@@ -378,8 +384,13 @@ function scanStockRows(p){
   return p.stocks.map(x=>{const q=x.quantity==null?"обновляется…":x.quantity;return '<div class="stock"><span>'+esc(x.depotName)+'</span><span class="qty '+(x.quantity!=null&&Number(x.quantity)<=0?"zero":"")+'">'+esc(q)+'</span></div>';}).join("");
 }
 async function fetchScannedProduct(v){
-  const d=await api("/stock/api/search?q="+encodeURIComponent(v));
-  return d.products?.[0]||null;
+  try{
+    const d=await api("/stock/api/search?q="+encodeURIComponent(v),{timeoutMs:3500,retries:0});
+    return d.products?.[0]||null;
+  }catch(e){
+    if(e?.message==="Сервер не успел ответить.")return null;
+    throw e;
+  }
 }
 async function refreshScanStocks(v){
   for(let i=0;i<45;i++){
@@ -407,12 +418,22 @@ async function handleScannedCode(v){
   S.lastScanned=v;
   scanFeedback();
   flashScanFrame();
-  msg($("scanInfo"),"Штрихкод найден: "+v+". Загружаю остатки…","ok");
+  msg($("scanInfo"),"Проверяю штрихкод: "+v+"…");
   try{
     const p=await fetchScannedProduct(v);
     if(!p){
       $("scanResult").classList.remove("hidden");
-      $("scanResult").innerHTML='<div class="name">Товар не найден</div><div class="muted">Штрихкод: '+esc(v)+'</div><button id="scanNext" class="primary" style="width:100%;margin-top:12px">Дальше</button>';
+      $("scanResult").innerHTML='<div class="notice bad" style="font-size:18px;font-weight:800;text-align:center;padding:16px">Товар с таким штрихкодом не найден</div><div class="muted" style="text-align:center;margin-top:8px">Штрихкод: '+esc(v)+'</div>';
+      msg($("scanInfo"),"Товар с таким штрихкодом не найден","bad");
+      setTimeout(()=>{
+        if(S.lastScanned!==v)return;
+        $("scanResult").classList.add("hidden");
+        $("scanResult").innerHTML="";
+        S.scanLocked=false;
+        S.lastScanned="";
+        msg($("scanInfo"),"Камера включена. Наведите на следующий штрихкод.","ok");
+      },1400);
+      return;
     }else{
       S.product=p;
       $("scanResult").classList.remove("hidden");

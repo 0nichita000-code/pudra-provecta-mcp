@@ -14,7 +14,7 @@ import android.webkit.WebViewClient;
 
 public class MainActivity extends Activity {
     private static final int CAMERA_REQUEST = 1001;
-    private static final String START_URL = "https://pudra-provecta-mcp.onrender.com/stock";
+    private static final String START_URL = "https://pudra-stock.onrender.com";
     private WebView webView;
 
     @Override
@@ -33,7 +33,7 @@ public class MainActivity extends Activity {
         settings.setDatabaseEnabled(true);
         settings.setMediaPlaybackRequiresUserGesture(false);
         settings.setCacheMode(WebSettings.LOAD_DEFAULT);
-        settings.setUserAgentString(settings.getUserAgentString() + " PUDRAStockAndroid/1.0");
+        settings.setUserAgentString(settings.getUserAgentString() + " PUDRAStockAndroid/1.1");
 
         CookieManager.getInstance().setAcceptCookie(true);
         CookieManager.getInstance().setAcceptThirdPartyCookies(webView, true);

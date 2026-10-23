@@ -771,7 +771,22 @@ async function getLots(dateFrom, dateTo, extra = {}) {
 
 function simpleBranch(b) { return { id: idOf(b), code: b.Code ?? b.code ?? "", name: b.Name ?? b.name ?? "" }; }
 function simpleDepot(d) { return { id: idOf(d), code: d.Code ?? d.code ?? "", name: d.Name ?? d.name ?? "", branch: d.Branch ?? d.branch ?? null }; }
-function simpleArticle(a) { return { id: idOf(a), barcode: a.Barcode ?? a.barcode ?? "", additionalBarcodes: articleBarcodes(a), code: a.Code ?? a.code ?? "", name: a.Name ?? a.name ?? "", price: a.Price ?? a.price ?? null, reserve: a.Reserve ?? a.reserve ?? null }; }
+function articlePhoto(a) {
+  const candidates = [
+    a.PhotoUrl, a.photoUrl, a.ImageUrl, a.imageUrl,
+    a.Photo, a.photo, a.Image, a.image, a.Picture, a.picture,
+    a.ThumbnailUrl, a.thumbnailUrl
+  ];
+  for (const v of candidates) {
+    if (typeof v === "string" && /^https?:\/\//i.test(v.trim())) return v.trim();
+    if (v && typeof v === "object") {
+      const u = v.Url ?? v.url ?? v.Href ?? v.href ?? "";
+      if (typeof u === "string" && /^https?:\/\//i.test(u.trim())) return u.trim();
+    }
+  }
+  return "";
+}
+function simpleArticle(a) { return { id: idOf(a), barcode: a.Barcode ?? a.barcode ?? "", additionalBarcodes: articleBarcodes(a), code: a.Code ?? a.code ?? "", name: a.Name ?? a.name ?? "", price: a.Price ?? a.price ?? null, reserve: a.Reserve ?? a.reserve ?? null, photo: articlePhoto(a) }; }
 
 function docOperation(d) { return d.DocumentOperationType ?? d.documentOperationType ?? ""; }
 function docId(d) { return idOf(d.Id ?? d.id ?? d); }

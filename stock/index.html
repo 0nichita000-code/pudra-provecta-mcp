@@ -154,6 +154,12 @@ video{width:100%;border-radius:16px;background:#000;max-height:420px;display:blo
   </main>
 </div>
 <script async src="https://cdn.jsdelivr.net/npm/@zxing/browser@0.1.5/umd/zxing-browser.min.js"></script>
-<script src="./app.js"></script>
+<script>
+setTimeout(function(){
+  var s=document.getElementById("bootSplash");
+  if(s){s.classList.add("ready");setTimeout(function(){s.classList.add("hidden")},320);}
+},2500);
+</script>
+<script src="./app.js?v=20261023-1646"></script>
 </body>
 </html>

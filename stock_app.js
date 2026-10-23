@@ -11,7 +11,8 @@ export function createStockApp(deps) {
   const transfers = [];
   const discrepancies = [];
 
-  const sendJson=(res,status,data)=>{res.writeHead(status,{"content-type":"application/json; charset=utf-8","cache-control":"no-store"});res.end(JSON.stringify(data));};
+  const corsHeaders={"access-control-allow-origin":"*","access-control-allow-methods":"GET,POST,PATCH,DELETE,OPTIONS","access-control-allow-headers":"content-type,x-pudra-pin,x-pudra-user,x-pudra-role"};
+  const sendJson=(res,status,data)=>{res.writeHead(status,{"content-type":"application/json; charset=utf-8","cache-control":"no-store",...corsHeaders});res.end(JSON.stringify(data));};
   const withTimeout=(promise,ms)=>Promise.race([
     promise,
     new Promise((_,reject)=>setTimeout(()=>reject(new Error("lookup timeout")),ms))
@@ -153,6 +154,7 @@ export function createStockApp(deps) {
       const data=await fs.readFile(path.join(__dirname,"stock","app.js"));res.writeHead(200,{"content-type":"application/javascript; charset=utf-8","cache-control":"no-store"});res.end(data);return true;
     }
     if(!url.pathname.startsWith("/stock/api/"))return false;
+    if(req.method==="OPTIONS"){res.writeHead(204,corsHeaders);res.end();return true;}
     const a=authInfo(req); if(!a.ok){sendJson(res,401,{error:"Неверный PIN"});return true;}
     if(req.method==="GET"&&url.pathname==="/stock/api/meta"){
       const rawDepots=await getDepots(false);const ds=rawDepots.map(simpleDepot).filter(d=>d.id && allowedDepotName(d.name));sendJson(res,200,{depots:ds,user:a.user,role:a.role});return true;

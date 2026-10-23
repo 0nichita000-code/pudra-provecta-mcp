@@ -385,6 +385,15 @@ async function stopScan(){
 function scanStockRows(p){
   return p.stocks.map(x=>{const q=x.quantity==null?"обновляется…":x.quantity;return '<div class="stock"><span>'+esc(x.depotName)+'</span><span class="qty '+(x.quantity!=null&&Number(x.quantity)<=0?"zero":"")+'">'+esc(q)+'</span></div>';}).join("");
 }
+function photoHtml(p){
+  const src=String(p?.photo||p?.photoUrl||p?.image||p?.imageUrl||"").trim();
+  if(src)return '<div class="productPhoto"><img src="'+esc(src)+'" alt="" onerror="this.parentNode.innerHTML=\'Нет фото\'"></div>';
+  return '<div class="productPhoto">Нет фото</div>';
+}
+function compactScanner(on=true){
+  const wrap=$("scanVideoWrap");
+  if(wrap)wrap.classList.toggle("compact",!!on);
+}
 async function fetchScannedProduct(v){
   try{
     const d=await api("/stock/api/search?q="+encodeURIComponent(v),{timeoutMs:3500,retries:0});
@@ -440,9 +449,11 @@ async function handleScannedCode(v){
       S.product=p;
       $("scanResult").classList.remove("hidden");
       $("scanResult").innerHTML=
-        '<div class="row"><div class="grow"><div class="name" style="font-size:20px">'+esc(p.name)+'</div><div class="muted">Штрихкод: '+esc(p.barcode||v)+' · Цена: '+esc(p.price)+' MDL</div></div></div>'+
+        '<div class="productTop">'+photoHtml(p)+'<div><div class="name" style="font-size:20px">'+esc(p.name)+'</div><div class="muted" style="margin-top:5px">Штрихкод: '+esc(p.barcode||v)+' · Цена: '+esc(p.price)+' MDL</div></div></div>'+
         '<h4>Остатки</h4><div id="scanStocks">'+scanStockRows(p)+'</div>'+
         '<div class="grid" style="margin-top:14px"><button id="scanMove" class="ghost">Запросить перемещение</button><button id="scanDiff" class="ghost">Есть расхождение</button></div><button id="scanNext" class="primary" style="width:100%;margin-top:10px">Дальше</button><div id="scanMoveBox" style="margin-top:10px"></div><div id="scanDiffBox" style="margin-top:10px"></div>';
+      compactScanner(true);
+      setTimeout(()=>$("scanResult")?.scrollIntoView({behavior:"smooth",block:"start"}),60);
       if(p.stocks?.some(x=>x.quantity==null)){
         msg($("scanInfo"),"Товар найден. Получаю остатки…");
         refreshScanStocks(v);
@@ -457,6 +468,7 @@ async function handleScannedCode(v){
       $("scanResult").innerHTML="";
       S.scanLocked=false;
       S.lastScanned="";
+      compactScanner(false);
       msg($("scanInfo"),"Камера включена. Наведите на следующий штрихкод.","ok");
     });
   }catch(e){
@@ -474,6 +486,7 @@ async function startScan(){
   if(S.stream||S.zxingControls){
     S.scanLocked=false;
     $("scanResult").classList.add("hidden");
+    compactScanner(false);
     msg($("scanInfo"),"Камера уже включена. Наведите на штрихкод.","ok");
     return;
   }

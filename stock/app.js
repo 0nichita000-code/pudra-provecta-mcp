@@ -571,25 +571,36 @@ async function boot(){
   const splash=$("bootSplash");
   const label=$("bootLabel");
   const detail=$("bootDetail");
-  let dots=0;
+  let dots=0,finished=false;
   const ticker=setInterval(()=>{
     dots=(dots+1)%4;
-    if(label)label.textContent="Подключаемся к базе"+(".".repeat(dots));
+    if(label&&!finished)label.textContent="Подключаемся к базе"+(".".repeat(dots));
   },500);
-  try{
-    await api("/stock/api/meta",{timeoutMs:65000,retries:0});
-    if(label)label.textContent="Подключено";
-    if(detail)detail.textContent="Данные PUDRA готовы";
-    if(splash)splash.classList.add("ready");
-    setTimeout(()=>splash?.classList.add("hidden"),350);
-  }catch(e){
-    if(label)label.textContent="Сервер запускается";
-    if(detail)detail.textContent="Можно повторить подключение через несколько секунд";
-    setTimeout(()=>splash?.classList.add("hidden"),1200);
-  }finally{
+
+  const openApp=()=>{
+    if(finished)return;
+    finished=true;
     clearInterval(ticker);
-    await restoreLogin();
+    if(label)label.textContent="PUDRA STOCK";
+    if(detail)detail.textContent="Сервер подключится в фоне";
+    if(splash)splash.classList.add("ready");
+    setTimeout(()=>splash?.classList.add("hidden"),300);
+  };
+
+  setTimeout(openApp,3500);
+
+  try{
+    await api("/stock/api/meta",{timeoutMs:30000,retries:0});
+    if(!finished){
+      if(label)label.textContent="Подключено";
+      if(detail)detail.textContent="Данные PUDRA готовы";
+      setTimeout(openApp,250);
+    }
+  }catch(e){
+    openApp();
   }
+
+  restoreLogin();
 }
 boot();
 })();

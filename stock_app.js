@@ -12,6 +12,10 @@ export function createStockApp(deps) {
   const discrepancies = [];
 
   const sendJson=(res,status,data)=>{res.writeHead(status,{"content-type":"application/json; charset=utf-8","cache-control":"no-store"});res.end(JSON.stringify(data));};
+  const withTimeout=(promise,ms)=>Promise.race([
+    promise,
+    new Promise((_,reject)=>setTimeout(()=>reject(new Error("lookup timeout")),ms))
+  ]);
   const esc=s=>String(s??"");
   const authInfo=req=>{
     const pin=String(req.headers["x-pudra-pin"]||"");
@@ -96,12 +100,12 @@ export function createStockApp(deps) {
     let hiddenMatch=false;
     if(exact && matched.length===0){
       try{
-        const modern=await modernSearchAdditionalBarcode(s);
+        const modern=await withTimeout(modernSearchAdditionalBarcode(s),900);
         if(modern?.article && (!modern.hidden || includeHidden)){ matched=[modern.article]; hiddenMatch=!!modern.hidden; }
       }catch{}
       if(matched.length===0){
         try{
-          const legacy=await legacySearchAdditionalBarcode(s);
+          const legacy=await withTimeout(legacySearchAdditionalBarcode(s),900);
           if(legacy?.article && (!legacy.hidden || includeHidden)){ matched=[legacy.article]; hiddenMatch=!!legacy.hidden; }
         }catch{}
       }

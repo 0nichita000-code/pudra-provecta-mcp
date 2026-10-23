@@ -1,4 +1,5 @@
 (()=>{
+const API_BASE="https://pudra-provecta-mcp.onrender.com";
 const S={user:"",role:"staff",pin:"",depots:[],product:null,stream:null,scanTimer:null,watchTimer:null,lastTransferId:0,lastDiffId:0,zxingControls:null,scanLocked:false,lastScanned:"",cameraIds:[],cameraIndex:0,inventory:[],invShown:0,invGroupName:"",audioCtx:null};
 const $=id=>document.getElementById(id);
 const esc=s=>String(s??"").replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[m]));
@@ -14,7 +15,8 @@ async function api(url,opt={}){
     const ctl=new AbortController();
     const t=setTimeout(()=>ctl.abort(),timeoutMs);
     try{
-      const r=await fetch(url,{...fetchOpt,signal:ctl.signal,headers:{...headers(),...(fetchOpt.headers||{})}});
+      const target=url.startsWith("/stock/api/")?API_BASE+url:url;
+      const r=await fetch(target,{...fetchOpt,signal:ctl.signal,headers:{...headers(),...(fetchOpt.headers||{})}});
       const d=await r.json().catch(()=>({}));
       if(!r.ok)throw new Error(d.error||("Ошибка "+r.status));
       return d;
@@ -564,5 +566,30 @@ $("loginBtn").addEventListener("click",()=>login(false));$("role").addEventListe
 $("startScan").addEventListener("click",startScan);$("stopScan").addEventListener("click",stopScan);$("invReload").addEventListener("click",()=>{S.inventory=[];loadInventory();});$("groupSearch").addEventListener("input",renderGroupList);$("invBack").addEventListener("click",()=>{$("inventoryHome").classList.remove("hidden");$("inventoryGroupView").classList.add("hidden");renderGroupList();});$("invDepot").addEventListener("change",()=>renderInventory(true));$("invSearch").addEventListener("input",()=>renderInventory(true));$("invMore").addEventListener("click",()=>renderInventory(false));$("reloadSales").addEventListener("click",loadSales);$("reloadReq").addEventListener("click",loadRequests);$("reloadDiff").addEventListener("click",loadDiffs);$("reloadMonitor").addEventListener("click",loadMonitoring);
 document.querySelectorAll(".tab").forEach(b=>b.addEventListener("click",()=>tab(b.dataset.tab)));
 updatePinVisibility();
-restoreLogin();
+
+async function boot(){
+  const splash=$("bootSplash");
+  const label=$("bootLabel");
+  const detail=$("bootDetail");
+  let dots=0;
+  const ticker=setInterval(()=>{
+    dots=(dots+1)%4;
+    if(label)label.textContent="Подключаемся к базе"+(".".repeat(dots));
+  },500);
+  try{
+    await api("/stock/api/meta",{timeoutMs:65000,retries:0});
+    if(label)label.textContent="Подключено";
+    if(detail)detail.textContent="Данные PUDRA готовы";
+    if(splash)splash.classList.add("ready");
+    setTimeout(()=>splash?.classList.add("hidden"),350);
+  }catch(e){
+    if(label)label.textContent="Сервер запускается";
+    if(detail)detail.textContent="Можно повторить подключение через несколько секунд";
+    setTimeout(()=>splash?.classList.add("hidden"),1200);
+  }finally{
+    clearInterval(ticker);
+    await restoreLogin();
+  }
+}
+boot();
 })();

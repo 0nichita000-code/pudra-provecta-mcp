@@ -157,7 +157,8 @@ function optionList(selected=""){return '<option value="">Выберите то�
 function showProduct(p){
   S.product=p;
   const card=$("productCard");card.classList.remove("hidden");
-  card.innerHTML='<div class="row"><div class="grow"><div class="name" style="font-size:20px">'+esc(p.name)+'</div><div class="muted">Штрихкод: '+esc(p.barcode||"—")+' · Код: '+esc(p.code||"—")+'</div></div><span class="pill">'+esc(p.price)+' MDL</span></div>'+
+  const hiddenBadge=(S.role==="admin"&&p.hidden)?'<div style="display:inline-block;margin:0 0 10px 0;padding:7px 10px;border-radius:999px;background:#fff0f0;color:#b42318;border:1px solid #f3b6b0;font-weight:800;font-size:13px">СКРЫТ / НЕАКТИВЕН В PROVECTA</div>':'';
+  card.innerHTML=hiddenBadge+'<div class="row"><div class="grow"><div class="name" style="font-size:20px">'+esc(p.name)+'</div><div class="muted">Штрихкод: '+esc(p.barcode||"—")+' · Код: '+esc(p.code||"—")+'</div></div><span class="pill">'+esc(p.price)+' MDL</span></div>'+
     '<h4>Остатки</h4>'+stockRows(p)+
     '<div style="height:12px"></div><div class="grid"><button id="moveBtn" class="primary">Запросить перемещение</button><button id="diffBtn" class="ghost">Есть расхождение</button></div>'+
     '<div id="actionBox" style="margin-top:12px"></div>';

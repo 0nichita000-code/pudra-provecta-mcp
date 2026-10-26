@@ -106,12 +106,12 @@ export function createStockApp(deps) {
     let hiddenMatch=false;
     if(exact && matched.length===0){
       try{
-        const modern=await withTimeout(modernSearchAdditionalBarcode(s),10000);
+        const modern=await withTimeout(legacySearchAdditionalBarcode(s),20000);
         if(modern?.article && (!modern.hidden || includeHidden)){ matched=[modern.article]; hiddenMatch=!!modern.hidden; }
       }catch{}
       if(matched.length===0){
         try{
-          const legacy=await withTimeout(legacySearchAdditionalBarcode(s),10000);
+          const legacy=await withTimeout(modernSearchAdditionalBarcode(s),10000);
           if(legacy?.article && (!legacy.hidden || includeHidden)){ matched=[legacy.article]; hiddenMatch=!!legacy.hidden; }
         }catch{}
       }

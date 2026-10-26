@@ -349,8 +349,27 @@ async function legacyArticleLoad(articleId) {
 }
 
 function articleBarcodes(a) {
-  const xs = a?.ArticleBarcodes ?? a?.articleBarcodes ?? [];
-  return Array.isArray(xs) ? xs.map(x => String(x ?? "").trim()).filter(Boolean) : [];
+  // Provecta can represent alternate barcodes as strings, ArticleBarcode
+  // objects ({ Value }), or WCF arrays ({ ArticleBarcode: [...] }).
+  const raw = a?.ArticleBarcodes ?? a?.articleBarcodes ?? a?.AdditionalBarcodes ?? a?.additionalBarcodes ?? [];
+  const out = [];
+  const visit = (x, depth = 0) => {
+    if (x == null || depth > 5) return;
+    if (Array.isArray(x)) { for (const v of x) visit(v, depth + 1); return; }
+    if (typeof x === "string" || typeof x === "number") {
+      const value = String(x).trim();
+      if (value) out.push(value);
+      return;
+    }
+    if (typeof x === "object") {
+      if ("Value" in x || "value" in x) visit(x.Value ?? x.value, depth + 1);
+      else for (const key of ["ArticleBarcode", "articleBarcode", "items", "Items", "Values"]) {
+        if (key in x) visit(x[key], depth + 1);
+      }
+    }
+  };
+  visit(raw);
+  return [...new Set(out)];
 }
 
 function findArticleWithBarcode(payload, barcode, depth = 0) {

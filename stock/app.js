@@ -135,7 +135,7 @@ async function login(auto=false){
   if(!S.user)return msg($("loginMsg"),"Введите имя","bad");
   if(S.role==="admin"&&!S.pin)return msg($("loginMsg"),"Введите PIN администратора","bad");
   try{
-    const m=await api("/stock/api/meta");
+    const m=await api("/stock/api/meta",{timeoutMs:30000,retries:2});
     S.depots=m.depots;
     $("login").classList.add("hidden");
     $("app").classList.remove("hidden");
@@ -145,7 +145,7 @@ async function login(auto=false){
     saveLogin();
     if(S.role==="admin")startAdminWatch();
   }catch(e){
-    if(auto){try{localStorage.removeItem("pudraStockLogin");}catch{}}
+    // Keep the saved profile on temporary network/server errors; retry on next launch.
     msg($("loginMsg"),e.message,"bad");
   }
 }

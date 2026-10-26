@@ -582,7 +582,11 @@ async function legacySearchAdditionalBarcode(barcode) {
     { articleBarcodePredicate: { Values: { IsExcluded: false, IsNull: false, Value: [barcode] } } },
     { articleBarcodePredicate: { Values: { Values: [barcode] } } },
     { articleBarcodePredicate: { Values: [barcode] } },
-    { articleBarcodePredicate: {} }
+    { articleBarcodePredicate: {} },
+    { articleBarcodePredicate: { Values: { Value: { string: [barcode] } } } },
+    { articleBarcodePredicate: { Values: { Value: [barcode], IsExcluded:false } }, take:20 },
+    { articleBarcodePredicate: { ArticleBarcodes: { Value: { ArticleBarcode: [{ Value: barcode }] } } } },
+    { articleBarcodePredicate: { ArticleBarcodes: { Value: [{ Value: barcode }] } } }
   ];
   for (const body of bodies) {
     try {

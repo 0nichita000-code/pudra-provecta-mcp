@@ -95,18 +95,19 @@ export function createStockApp(deps) {
     const exact=/^\d{8,14}$/.test(s);
     let matched=rawArticles.filter(a=>{
       const vals=[a.Name,a.name,a.Barcode,a.barcode,a.Code,a.code,...articleBarcodes(a)].map(v=>String(v||"").toLowerCase());
+      if(exact && JSON.stringify(a).includes(s)) return true;
       return !s ? true : (exact?vals.includes(s):vals.some(v=>v.includes(s)));
     }).slice(0,!s?6000:(exact?1:50));
 
     let hiddenMatch=false;
     if(exact && matched.length===0){
       try{
-        const modern=await withTimeout(modernSearchAdditionalBarcode(s),900);
+        const modern=await withTimeout(modernSearchAdditionalBarcode(s),10000);
         if(modern?.article && (!modern.hidden || includeHidden)){ matched=[modern.article]; hiddenMatch=!!modern.hidden; }
       }catch{}
       if(matched.length===0){
         try{
-          const legacy=await withTimeout(legacySearchAdditionalBarcode(s),900);
+          const legacy=await withTimeout(legacySearchAdditionalBarcode(s),10000);
           if(legacy?.article && (!legacy.hidden || includeHidden)){ matched=[legacy.article]; hiddenMatch=!!legacy.hidden; }
         }catch{}
       }

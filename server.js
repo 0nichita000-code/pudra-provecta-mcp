@@ -590,7 +590,7 @@ async function legacySearchAdditionalBarcode(barcode) {
       const data = result?.data;
       const record = findBarcodeRecord(data, barcode);
       const articleId = articleIdFromBarcodeRecord(record);
-      diagnostics.push({ method: "ArticleBarcodeSearch", keys: Object.keys(body.articleBarcodePredicate), foundRecord: !!record, articleId, authVariant: result?.authVariant ?? null });
+      diagnostics.push({ method: "ArticleBarcodeSearch", keys: Object.keys(body.articleBarcodePredicate), foundRecord: !!record, articleId, authVariant: result?.authVariant ?? null, responseShape: safeShape(data) });
       if (articleId) {
         const canonical = articleCache.byId.get(articleId);
         if (canonical) return { article: { ...canonical, ArticleBarcodes: [...new Set([...articleBarcodes(canonical), barcode])] }, hidden:false, diagnostics };

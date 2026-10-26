@@ -576,43 +576,47 @@ async function modernSearchAdditionalBarcode(barcode) {
 }
 
 async function legacySearchAdditionalBarcode(barcode) {
+  // Restore the original 9 October lookup: ArticleSearch / ArticleLoad.
+  // Retain the newer ArticleBarcodeSearch only as a fallback.
   const diagnostics = [];
-  const bodies = [
-    { articleBarcodePredicate: { Values: { Value: [barcode] } } },
-    { articleBarcodePredicate: { Values: { IsExcluded: false, IsNull: false, Value: [barcode] } } },
-    { articleBarcodePredicate: { Values: { Values: [barcode] } } },
-    { articleBarcodePredicate: { Values: [barcode] } },
-    { articleBarcodePredicate: {} },
-    { articleBarcodePredicate: { Values: { Value: { string: [barcode] } } } },
-    { articleBarcodePredicate: { Values: { Value: [barcode], IsExcluded:false } }, take:20 },
-    { articleBarcodePredicate: { ArticleBarcodes: { Value: { ArticleBarcode: [{ Value: barcode }] } } } },
-    { articleBarcodePredicate: { ArticleBarcodes: { Value: [{ Value: barcode }] } } }
+  const attempts = [
+    ["ArticleSearch", { article: { Barcode: barcode } }],
+    ["ArticleSearch", { barcode }],
+    ["ArticleSearch", { Barcode: barcode }],
+    ["ArticleSearch", { text: barcode }],
+    ["ArticleSearch", { search: barcode }],
+    ["ArticleLoad", { article: { Barcode: barcode } }]
   ];
-  for (const body of bodies) {
+  for (const [method, body] of attempts) {
     try {
-      const result = await legacyPost("ArticleBarcodeSearch", body);
-      const data = result?.data;
-      const record = findBarcodeRecord(data, barcode);
-      const articleId = articleIdFromBarcodeRecord(record);
-      diagnostics.push({ method: "ArticleBarcodeSearch", keys: Object.keys(body.articleBarcodePredicate), foundRecord: !!record, articleId, authVariant: result?.authVariant ?? null, responseShape: safeShape(data) });
-      if (articleId) {
-        const canonical = articleCache.byId.get(articleId);
-        if (canonical) return { article: { ...canonical, ArticleBarcodes: [...new Set([...articleBarcodes(canonical), barcode])] }, hidden:false, diagnostics };
-        try {
-          const loaded = await legacyArticleLoad(articleId);
-          const hiddenArticle = findArticleWithBarcode(loaded, barcode) || loaded?.Article || loaded?.article || loaded;
-          if (hiddenArticle && idOf(hiddenArticle)) {
-            return { article: { ...hiddenArticle, ArticleBarcodes: [...new Set([...articleBarcodes(hiddenArticle), barcode])] }, hidden:true, diagnostics };
-          }
-        } catch (e) {
-          diagnostics.push({ method:"ArticleLoad", articleId, status:e.status||null, error:String(e.message||e).slice(0,180) });
-        }
+      const result = await legacyPost(method, body);
+      const found = findArticleWithBarcode(result?.data, barcode);
+      diagnostics.push({ method, keys:Object.keys(body), found:!!found });
+      if (found) {
+        const id = idOf(found);
+        const canonical = id ? articleCache.byId.get(id) : null;
+        return { article: canonical ? { ...canonical, ArticleBarcodes:[...new Set([...articleBarcodes(canonical),barcode])] } : found,
+          hidden: !canonical, diagnostics };
       }
     } catch (e) {
-      diagnostics.push({ method: "ArticleBarcodeSearch", keys: Object.keys(body.articleBarcodePredicate), status: e.status || null, error: String(e.message || e).slice(0, 180) });
+      diagnostics.push({ method, status:e.status||null, error:String(e.message||e).slice(0,120) });
     }
   }
-  return { article: null, diagnostics };
+  for (const body of [
+    { articleBarcodePredicate:{ Values:{ Value:[barcode] } } },
+    { articleBarcodePredicate:{ ArticleBarcodes:{ Value:[{ Value:barcode }] } } }
+  ]) {
+    try {
+      const result=await legacyPost("ArticleBarcodeSearch",body);
+      const record=findBarcodeRecord(result?.data,barcode);
+      const id=articleIdFromBarcodeRecord(record);
+      if(id) {
+        const canonical=articleCache.byId.get(id);
+        if(canonical)return {article:{...canonical,ArticleBarcodes:[...new Set([...articleBarcodes(canonical),barcode])]},hidden:false,diagnostics};
+      }
+    } catch(e) { diagnostics.push({method:"ArticleBarcodeSearch",error:String(e.message||e).slice(0,120)}); }
+  }
+  return {article:null,diagnostics};
 }
 
 async function apiGet(path, params = {}, retryAuth = true) {

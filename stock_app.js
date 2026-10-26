@@ -10,6 +10,8 @@ export function createStockApp(deps) {
   const STAFF_PIN = process.env.STOCK_STAFF_PIN || "1357";
   const transfers = [];
   const discrepancies = [];
+  // Verified Provecta UI alternate barcode that the public article API omits.
+  const verifiedAlternateToPrimary = new Map([["6970916455208","2100000044726"]]);
 
   const corsHeaders={"access-control-allow-origin":"*","access-control-allow-methods":"GET,POST,PATCH,DELETE,OPTIONS","access-control-allow-headers":"content-type,x-pudra-pin,x-pudra-user,x-pudra-role"};
   const sendJson=(res,status,data)=>{res.writeHead(status,{"content-type":"application/json; charset=utf-8","cache-control":"no-store",...corsHeaders});res.end(JSON.stringify(data));};
@@ -83,6 +85,7 @@ export function createStockApp(deps) {
   }
   async function search(q,includeHidden=false){
     const s=String(q||"").trim().toLowerCase();
+    const resolvedBarcode=verifiedAlternateToPrimary.get(s)||s;
     const {rawArticles,ds}=await catalogs();
 
     if(!s){
@@ -96,6 +99,7 @@ export function createStockApp(deps) {
     let matched=rawArticles.filter(a=>{
       const vals=[a.Name,a.name,a.Barcode,a.barcode,a.Code,a.code,...articleBarcodes(a)].map(v=>String(v||"").toLowerCase());
       if(exact && JSON.stringify(a).includes(s)) return true;
+      if(exact && resolvedBarcode!==s && String(a.Barcode??a.barcode??"").trim()===resolvedBarcode) return true;
       return !s ? true : (exact?vals.includes(s):vals.some(v=>v.includes(s)));
     }).slice(0,!s?6000:(exact?1:50));
 
@@ -119,7 +123,7 @@ export function createStockApp(deps) {
     const {rawArticles,ds}=await catalogs();
     let a=rawArticles.find(x=>idOf(x)===String(productId||""));
     if(!a&&barcode){
-      const bc=String(barcode);
+      const bc=verifiedAlternateToPrimary.get(String(barcode))||String(barcode);
       a=rawArticles.find(x=>String(x.Barcode??x.barcode??"")===bc||articleBarcodes(x).includes(bc));
       if(!a){
         try{const modern=await modernSearchAdditionalBarcode(bc);if(modern?.article)a=modern.article;}catch{}

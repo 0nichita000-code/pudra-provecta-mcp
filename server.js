@@ -1084,6 +1084,25 @@ function createMcpServer() {
     });
   });
 
+  mcp.registerTool("latest_products", {
+    title: "Latest created products",
+    description: "Return the most recently created Provecta products, sorted by CreatedOn descending.",
+    inputSchema: { limit: z.number().int().min(1).max(100).optional() },
+    annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: true }
+  }, async ({ limit = 10 }) => {
+    const articles = await getArticles(true);
+    const items = [...articles]
+      .map(a => ({
+        ...simpleArticle(a),
+        createdOn: a.CreatedOn ?? a.createdOn ?? null,
+        updatedOn: a.UpdatedOn ?? a.updatedOn ?? null
+      }))
+      .filter(a => a.createdOn)
+      .sort((a,b) => new Date(b.createdOn).getTime() - new Date(a.createdOn).getTime())
+      .slice(0, limit);
+    return jsonReply({ count: items.length, products: items });
+  });
+
   mcp.registerTool("current_stock", {
     title: "Current stock",
     description: "Get current Provecta balances. Optionally filter by branch IDs and/or depot IDs.",

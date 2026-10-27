@@ -1090,24 +1090,53 @@ function createMcpServer() {
     inputSchema: { branchIds: z.array(z.string()).optional(), depotIds: z.array(z.string()).optional(), limit: z.number().int().min(1).max(20000).optional() },
     annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: true }
   }, async ({ branchIds = [], depotIds = [], limit = 10000 }) => {
-    await getArticles(false);
-    const data = asArray(await apiGet("/v1/resume/currentBalance", { branchId: branchIds, depotId: depotIds }));
-    const enriched = data.map(row => {
-      const aid = idOf(row.Article ?? row.article ?? row.ArticleId ?? row.articleId);
-      const a = articleCache.byId.get(aid) || {};
-      return {
-        ...row,
-        ArticleInfo: {
-          id: aid,
-          barcode: a.Barcode ?? a.barcode ?? "",
-          code: a.Code ?? a.code ?? "",
-          name: a.Name ?? a.name ?? "",
-          price: a.Price ?? a.price ?? null,
-          group: a.Group?.Name ?? a.group?.name ?? a.Group ?? a.group ?? ""
-        }
-      };
+    await Promise.all([getArticles(false), getDepots(false)]);
+    if (!stockCache.ready || Date.now() - stockCache.at > 5 * 60 * 1000) {
+      await refreshStockCache(true);
+    }
+
+    const allDepots = depotCache.items.map(simpleDepot).filter(d => d.id);
+    const depotSet = new Set((depotIds || []).map(String));
+    const branchSet = new Set((branchIds || []).map(String));
+    const selectedDepots = allDepots.filter(d => {
+      if (depotSet.size && !depotSet.has(String(d.id))) return false;
+      const bid = idOf(d.branch);
+      if (branchSet.size && !branchSet.has(String(bid))) return false;
+      return true;
     });
-    return jsonReply({ count: Math.min(enriched.length, limit), totalReturnedByProvecta: enriched.length, items: enriched.slice(0, limit) });
+    const selectedIds = new Set(selectedDepots.map(d => String(d.id)));
+
+    const items = [];
+    outer:
+    for (const [aid, xs] of stockCache.byArticle.entries()) {
+      const a = articleCache.byId.get(aid) || {};
+      for (const x of xs) {
+        if (!selectedIds.has(String(x.id))) continue;
+        items.push({
+          Article: { Id: aid },
+          Depot: { Id: x.id, Name: x.name },
+          BalanceQuantitySum: Number(x.quantity) || 0,
+          ArticleInfo: {
+            id: aid,
+            barcode: a.Barcode ?? a.barcode ?? "",
+            code: a.Code ?? a.code ?? "",
+            name: a.Name ?? a.name ?? "",
+            price: a.Price ?? a.price ?? null,
+            group: a.Group?.Name ?? a.group?.name ?? a.Group ?? a.group ?? ""
+          }
+        });
+        if (items.length >= limit) break outer;
+      }
+    }
+
+    return jsonReply({
+      count: items.length,
+      totalReturnedByProvecta: items.length,
+      items,
+      source: "pudra-stock-cache",
+      stockCacheAgeMs: Date.now() - stockCache.at,
+      readyDepots: stockCache.readyDepots?.size || 0
+    });
   });
 
   mcp.registerTool("recent_documents", {

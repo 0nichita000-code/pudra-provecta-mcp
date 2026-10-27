@@ -333,6 +333,7 @@ async function legacyPost(method, body) {
         headers: variants[i],
         body: JSON.stringify(body)
       }, 0);
+      if (method==="ArticleLoad" && !data && !legacyPost._reported) { legacyPost._reported=true; console.warn("LEGACY_ARTICLELOAD_DIAG",JSON.stringify({variant:i,variantCount:variants.length,hasLegacyCode:!!legacyCode,hasCookie:!!legacyCookie,resultKind:data===null?"null":typeof data,clientPresent:!!modern.client})); }
       if (data !== null && data !== undefined && data !== "") return { data, authVariant: i, legacyToken: Boolean(legacyCode) };
       last = { data, authVariant: i, legacyToken: Boolean(legacyCode) };
     } catch (e) {

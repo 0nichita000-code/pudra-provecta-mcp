@@ -344,8 +344,12 @@ async function legacyPost(method, body) {
 }
 
 async function legacyArticleLoad(articleId) {
-  const r = await legacyPost("ArticleLoad", { article: { Id: articleId } });
-  return r?.data ?? null;
+  // Browser sends both article and articleId for ArticleLoad.
+  const r = await legacyPost("ArticleLoad", { articleId, article: { Id: articleId } });
+  const raw = r?.data ?? null;
+  if (!raw) return null;
+  const obj = raw.ArticleLoadResult ?? raw.articleLoadResult ?? raw.d?.ArticleLoadResult ?? raw.d ?? raw;
+  return obj;
 }
 
 function articleBarcodes(a) {

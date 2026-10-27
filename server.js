@@ -680,9 +680,12 @@ async function getDepots(force = false) {
 // Progressive, rate-limited index of alternate Provecta barcodes.
 // ArticleLoad (by article Id) contains ArticleBarcodes, unlike /article/select.
 const alternateIndex = new Map();
-const alternateLoaded = new Set();
+const alternateLoaded = new Map(); // article id -> last successful fetch timestamp
 let alternateCursor = 0;
 let alternateIndexRunning = false;
+let alternateErrors = 0;
+let alternatePasses = 0;
+let alternateLastCompleted = null;
 function indexLoadedBarcodes(payload, canonicalId, depth = 0) {
   if (payload == null || depth > 10) return 0;
   if (Array.isArray(payload)) return payload.reduce((n,x)=>n+indexLoadedBarcodes(x,canonicalId,depth+1),0);
@@ -690,7 +693,9 @@ function indexLoadedBarcodes(payload, canonicalId, depth = 0) {
   let n=0;
   if (payload.ArticleBarcodes || payload.articleBarcodes) {
     for (const bc of articleBarcodes(payload)) {
-      if (!alternateIndex.has(bc)) {alternateIndex.set(bc,canonicalId);n++;}
+      const owner=alternateIndex.get(bc);
+      if (!owner) {alternateIndex.set(bc,canonicalId);n++;}
+      else if(owner!==canonicalId) console.warn("ALT_BARCODE_COLLISION",bc,owner,canonicalId);
     }
   }
   for (const [key,value] of Object.entries(payload)) {
@@ -701,32 +706,52 @@ function indexLoadedBarcodes(payload, canonicalId, depth = 0) {
 }
 async function loadAlternateForArticle(a) {
   const id=idOf(a);
-  if(!id||alternateLoaded.has(id))return;
+  if(!id)return false;
+  const last=alternateLoaded.get(id)||0;
+  if(Date.now()-last<6*60*60*1000)return true;
   const data=await legacyArticleLoad(id);
-  // Only mark loaded when the provider returned a useful object.
   if(data && typeof data==="object") {
     indexLoadedBarcodes(data,id);
-    alternateLoaded.add(id);
+    alternateLoaded.set(id,Date.now());
+    return true;
   }
+  return false;
+}
+function getAlternateIndexStatus() {
+  return { running:alternateIndexRunning, scanned:alternateLoaded.size,
+    total:articleCache.items.length, codes:alternateIndex.size,
+    cursor:alternateCursor, errors:alternateErrors, passes:alternatePasses,
+    lastCompleted:alternateLastCompleted };
 }
 function startAlternateIndexing() {
   if(alternateIndexRunning)return;
   alternateIndexRunning=true;
   (async()=>{
-    // Low request rate avoids overloading Provecta while gradually indexing every product.
-    while(true) {
-      const articles=await getArticles(false);
-      if(alternateCursor>=articles.length)break;
-      const a=articles[alternateCursor++];
-      try {await loadAlternateForArticle(a);} catch(e) {
-        // Retry transient failures in the next pass, not in a tight loop.
-        console.warn("ALT_BARCODE_INDEX_ERROR",idOf(a),String(e.message||e).slice(0,100));
+    const articles=await getArticles(false);
+    let failed=0;
+    for(let i=0;i<articles.length;i++) {
+      const a=articles[(alternateCursor+i)%articles.length];
+      try {
+        if(!await loadAlternateForArticle(a)) failed++;
+      } catch(e) {
+        failed++;
+        alternateErrors++;
+        if(alternateErrors<=10||alternateErrors%500===0)
+          console.warn("ALT_BARCODE_INDEX_ERROR",idOf(a),String(e.message||e).slice(0,100));
+      }
+      if(i%50===0) {
+        alternateCursor=(alternateCursor+i)%articles.length;
+        console.log("ALT_BARCODE_PROGRESS",JSON.stringify(getAlternateIndexStatus()));
       }
       await sleep(120);
     }
+    alternateCursor=0;
+    alternatePasses++;
+    alternateLastCompleted=new Date().toISOString();
+    console.log("ALT_BARCODE_INDEX_COMPLETE",JSON.stringify({...getAlternateIndexStatus(),failed}));
+  })().catch(e=>console.warn("ALT_BARCODE_INDEX_FAILED",String(e.message||e))).finally(()=>{
     alternateIndexRunning=false;
-    console.log("ALT_BARCODE_INDEX_COMPLETE",{scanned:alternateLoaded.size,codes:alternateIndex.size});
-  })().catch(e=>{alternateIndexRunning=false;console.warn("ALT_BARCODE_INDEX_FAILED",String(e.message||e));});
+  });
 }
 function findIndexedAlternate(barcode) {
   const id=alternateIndex.get(String(barcode).trim());
@@ -1244,7 +1269,7 @@ function oauthChallenge(req) {
 const stockApp = createStockApp({
   getArticles, getDepots, getCachedStocks, refreshStockCache, getStockCacheState,
   simpleDepot, simpleArticle, articleBarcodes, idOf, asArray, apiGet, salesRows,
-  modernSearchAdditionalBarcode, legacySearchAdditionalBarcode, findIndexedAlternate, startAlternateIndexing
+  modernSearchAdditionalBarcode, legacySearchAdditionalBarcode, findIndexedAlternate, startAlternateIndexing, getAlternateIndexStatus
 });
 
 const httpServer = createServer(async (req, res) => {

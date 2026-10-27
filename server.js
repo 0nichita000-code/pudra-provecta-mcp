@@ -715,6 +715,7 @@ async function loadAlternateForArticle(a) {
     alternateLoaded.set(id,Date.now());
     return true;
   }
+  if(alternateErrors<3) console.warn("ALT_BARCODE_EMPTY_ARTICLELOAD",id,typeof data);
   return false;
 }
 function getAlternateIndexStatus() {
@@ -734,6 +735,12 @@ function startAlternateIndexing() {
       const a=articles[(start+i)%articles.length];
       try {
         if(!await loadAlternateForArticle(a)) failed++;
+        // Stop instead of making thousands of useless requests when the
+        // upstream ArticleLoad endpoint returns no article data.
+        if(i>=9 && alternateLoaded.size===0) {
+          console.error("ALT_BARCODE_SYNC_PAUSED_EMPTY_RESPONSES",JSON.stringify(getAlternateIndexStatus()));
+          break;
+        }
       } catch(e) {
         failed++;
         alternateErrors++;

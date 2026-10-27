@@ -5,7 +5,7 @@ import { fileURLToPath } from "node:url";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 export function createStockApp(deps) {
-  const { getArticles, getDepots, getCachedStocks, refreshStockCache, getStockCacheState, simpleDepot, simpleArticle, articleBarcodes, idOf, asArray, apiGet, salesRows, modernSearchAdditionalBarcode, legacySearchAdditionalBarcode, findIndexedAlternate, startAlternateIndexing } = deps;
+  const { getArticles, getDepots, getCachedStocks, refreshStockCache, getStockCacheState, simpleDepot, simpleArticle, articleBarcodes, idOf, asArray, apiGet, salesRows, modernSearchAdditionalBarcode, legacySearchAdditionalBarcode, findIndexedAlternate, startAlternateIndexing, getAlternateIndexStatus } = deps;
   const ADMIN_PIN = process.env.STOCK_ADMIN_PIN || "2468";
   const STAFF_PIN = process.env.STOCK_STAFF_PIN || "1357";
   const transfers = [];
@@ -168,6 +168,15 @@ export function createStockApp(deps) {
     const a=authInfo(req); if(!a.ok){sendJson(res,401,{error:"Неверный PIN"});return true;}
     if(req.method==="GET"&&url.pathname==="/stock/api/meta"){
       const rawDepots=await getDepots(false);const ds=rawDepots.map(simpleDepot).filter(d=>d.id && allowedDepotName(d.name));sendJson(res,200,{depots:ds,user:a.user,role:a.role});return true;
+    }
+    if(req.method==="GET"&&url.pathname==="/stock/api/barcode-sync-status") {
+      if(!a.admin) {sendJson(res,403,{error:"Только администратор"});return true;}
+      sendJson(res,200,getAlternateIndexStatus());return true;
+    }
+    if(req.method==="POST"&&url.pathname==="/stock/api/barcode-sync") {
+      if(!a.admin) {sendJson(res,403,{error:"Только администратор"});return true;}
+      startAlternateIndexing();
+      sendJson(res,202,getAlternateIndexStatus());return true;
     }
     if(req.method==="GET"&&url.pathname==="/stock/api/search"){
       const products=await search(url.searchParams.get("q")||"",a.admin);sendJson(res,200,{products});return true;

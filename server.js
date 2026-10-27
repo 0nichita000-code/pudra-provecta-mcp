@@ -719,7 +719,7 @@ async function loadAlternateForArticle(a) {
     alternateLoaded.set(id,Date.now());
     return true;
   }
-  if(alternateErrors<3) console.warn("ALT_BARCODE_EMPTY_ARTICLELOAD",id,typeof data);
+  if(alternateLoaded.size===0 && alternateCursor<12) console.warn("ALT_BARCODE_EMPTY_ARTICLELOAD",id,JSON.stringify(safeShape(data)).slice(0,900));
   return false;
 }
 function getAlternateIndexStatus() {

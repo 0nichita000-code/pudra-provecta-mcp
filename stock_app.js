@@ -5,7 +5,7 @@ import { fileURLToPath } from "node:url";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 export function createStockApp(deps) {
-  const { getArticles, getDepots, getCachedStocks, refreshStockCache, getStockCacheState, simpleDepot, simpleArticle, articleBarcodes, idOf, asArray, apiGet, salesRows, modernSearchAdditionalBarcode, legacySearchAdditionalBarcode } = deps;
+  const { getArticles, getDepots, getCachedStocks, refreshStockCache, getStockCacheState, simpleDepot, simpleArticle, articleBarcodes, idOf, asArray, apiGet, salesRows, modernSearchAdditionalBarcode, legacySearchAdditionalBarcode, findIndexedAlternate, startAlternateIndexing } = deps;
   const ADMIN_PIN = process.env.STOCK_ADMIN_PIN || "2468";
   const STAFF_PIN = process.env.STOCK_STAFF_PIN || "1357";
   const transfers = [];
@@ -104,6 +104,11 @@ export function createStockApp(deps) {
     }).slice(0,!s?6000:(exact?1:50));
 
     let hiddenMatch=false;
+    if(exact && matched.length===0) {
+      const indexed=findIndexedAlternate(s);
+      if(indexed) matched=[indexed];
+      else startAlternateIndexing();
+    }
     if(exact && matched.length===0){
       try{
         const modern=await withTimeout(legacySearchAdditionalBarcode(s),20000);

@@ -729,8 +729,9 @@ function startAlternateIndexing() {
   (async()=>{
     const articles=await getArticles(false);
     let failed=0;
+    const start=alternateCursor;
     for(let i=0;i<articles.length;i++) {
-      const a=articles[(alternateCursor+i)%articles.length];
+      const a=articles[(start+i)%articles.length];
       try {
         if(!await loadAlternateForArticle(a)) failed++;
       } catch(e) {
@@ -740,7 +741,7 @@ function startAlternateIndexing() {
           console.warn("ALT_BARCODE_INDEX_ERROR",idOf(a),String(e.message||e).slice(0,100));
       }
       if(i%50===0) {
-        alternateCursor=(alternateCursor+i)%articles.length;
+        alternateCursor=(start+i+1)%articles.length;
         console.log("ALT_BARCODE_PROGRESS",JSON.stringify(getAlternateIndexStatus()));
       }
       await sleep(120);

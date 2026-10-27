@@ -1021,6 +1021,14 @@ function createMcpServer() {
   }, async ({ query, limit = 30 }) => {
     const q = query.toLowerCase();
     const articles = await getArticles(false);
+    if (query === "__LATEST__") {
+      const latest = [...articles]
+        .filter(a => a.CreatedOn ?? a.createdOn)
+        .sort((a,b) => new Date(b.CreatedOn ?? b.createdOn).getTime() - new Date(a.CreatedOn ?? a.createdOn).getTime())
+        .slice(0, limit)
+        .map(a => ({ ...simpleArticle(a), createdOn: a.CreatedOn ?? a.createdOn ?? null, updatedOn: a.UpdatedOn ?? a.updatedOn ?? null }));
+      return jsonReply({ query, count: latest.length, products: latest });
+    }
     let matchedRaw = articles.filter(a => [a.Name, a.name, a.Barcode, a.barcode, a.Code, a.code].some(v => String(v || "").toLowerCase().includes(q)));
 
     // Provecta articles may contain additional/alternate barcodes in nested fields.

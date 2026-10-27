@@ -298,6 +298,12 @@ async function legacyPost(method, body) {
     "Accept": "application/json, */*",
     "Content-Type": "application/json; charset=utf-8",
     "Client": modern.client,
+    "ClientApplication": "ProvectaPOS 238",
+    "ClientDevice": "",
+    "ClientPlatform": "",
+    "ClientUid": "",
+    "Origin": origin,
+    "Referer": origin + "/app/",
     "X-Requested-With": "XMLHttpRequest"
   };
 

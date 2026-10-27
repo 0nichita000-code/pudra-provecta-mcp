@@ -677,6 +677,62 @@ async function getDepots(force = false) {
   depotCache = { at: Date.now(), items };
   return items;
 }
+// Progressive, rate-limited index of alternate Provecta barcodes.
+// ArticleLoad (by article Id) contains ArticleBarcodes, unlike /article/select.
+const alternateIndex = new Map();
+const alternateLoaded = new Set();
+let alternateCursor = 0;
+let alternateIndexRunning = false;
+function indexLoadedBarcodes(payload, canonicalId, depth = 0) {
+  if (payload == null || depth > 10) return 0;
+  if (Array.isArray(payload)) return payload.reduce((n,x)=>n+indexLoadedBarcodes(x,canonicalId,depth+1),0);
+  if (typeof payload !== "object") return 0;
+  let n=0;
+  if (payload.ArticleBarcodes || payload.articleBarcodes) {
+    for (const bc of articleBarcodes(payload)) {
+      if (!alternateIndex.has(bc)) {alternateIndex.set(bc,canonicalId);n++;}
+    }
+  }
+  for (const [key,value] of Object.entries(payload)) {
+    if (key==="ArticleBarcodes"||key==="articleBarcodes") continue;
+    if (value && typeof value==="object") n+=indexLoadedBarcodes(value,canonicalId,depth+1);
+  }
+  return n;
+}
+async function loadAlternateForArticle(a) {
+  const id=idOf(a);
+  if(!id||alternateLoaded.has(id))return;
+  const data=await legacyArticleLoad(id);
+  // Only mark loaded when the provider returned a useful object.
+  if(data && typeof data==="object") {
+    indexLoadedBarcodes(data,id);
+    alternateLoaded.add(id);
+  }
+}
+function startAlternateIndexing() {
+  if(alternateIndexRunning)return;
+  alternateIndexRunning=true;
+  (async()=>{
+    // Low request rate avoids overloading Provecta while gradually indexing every product.
+    while(true) {
+      const articles=await getArticles(false);
+      if(alternateCursor>=articles.length)break;
+      const a=articles[alternateCursor++];
+      try {await loadAlternateForArticle(a);} catch(e) {
+        // Retry transient failures in the next pass, not in a tight loop.
+        console.warn("ALT_BARCODE_INDEX_ERROR",idOf(a),String(e.message||e).slice(0,100));
+      }
+      await sleep(120);
+    }
+    alternateIndexRunning=false;
+    console.log("ALT_BARCODE_INDEX_COMPLETE",{scanned:alternateLoaded.size,codes:alternateIndex.size});
+  })().catch(e=>{alternateIndexRunning=false;console.warn("ALT_BARCODE_INDEX_FAILED",String(e.message||e));});
+}
+function findIndexedAlternate(barcode) {
+  const id=alternateIndex.get(String(barcode).trim());
+  return id ? articleCache.byId.get(id)||null : null;
+}
+
 async function getArticles(force = false) {
   if (!force && Date.now() - articleCache.at < 30 * 60 * 1000 && articleCache.items.length) return articleCache.items;
   const items = asArray(await apiGet("/v1/stock/article/select"));
@@ -689,6 +745,7 @@ async function getArticles(force = false) {
     if (bc) byBarcode.set(bc, a);
   }
   articleCache = { at: Date.now(), items, byId, byBarcode };
+  setImmediate(startAlternateIndexing);
   if (process.env.DEBUG_ARTICLE_SCHEMA === "1") { const sample = items.find(a => /OLLIN/i.test(String(a.Name ?? a.name ?? ""))) || items[0]; console.log("ARTICLE_SCHEMA_SAMPLE", JSON.stringify(sample)); }
   return items;
 }

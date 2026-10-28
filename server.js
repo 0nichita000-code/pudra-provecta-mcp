@@ -1222,7 +1222,8 @@ function createMcpServer() {
   }, async ({ dateFrom, dateTo, operationTypes = [], limit = 1000 }) => {
     if (dateFrom === "__SCHEMA__") {
       const sw = await fetchJson(`${BASE}/v2/api-docs`, { method: "GET", headers: { "Accept": "application/json" } }, 0);
-      return jsonReply({ path: sw?.paths?.["/v1/stock/document/select"] || null });
+      const hits = Object.fromEntries(Object.entries(sw?.paths || {}).filter(([k]) => k.includes("document/select") || k.includes("document")));
+      return jsonReply({ paths: hits });
     }
     let docs = dateFrom === "__PENDING__"
       ? asArray(await apiGet("/v1/stock/document/select", {})).filter(d => !(d.ApprovedOn ?? d.approvedOn))

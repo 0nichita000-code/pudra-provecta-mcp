@@ -11,7 +11,7 @@ export function createStockApp(deps) {
   const transfers = [];
   const discrepancies = [];
   // Verified Provecta UI alternate barcode that the public article API omits.
-  const verifiedAlternateToPrimary = new Map([["6970916455208","2100000044726"]]);
+  const verifiedAlternateToPrimary = new Map([["6924372614143","2100000044726"],["6924372615744","2100000044726"],["6924372634066","2100000044726"],["6924372635735","2100000044726"],["6932588302112","2100000044726"],["6933836103710","2100000044726"],["6933836130426","2100000044726"],["6933836130471","2100000044726"],["6933836132567","2100000044726"],["6970916455208","2100000044726"],["6971846332096","2100000044726"],["6972857301125","2100000044726"],["6972857378127","2100000044726"],["6975006664423","2100000044726"],["6982732511013","2100000044726"],["6982732511068","2100000044726"],["6982732597956","2100000044726"],["fl5-35t29","2100000044726"]]);
 
   const corsHeaders={"access-control-allow-origin":"*","access-control-allow-methods":"GET,POST,PATCH,DELETE,OPTIONS","access-control-allow-headers":"content-type,x-pudra-pin,x-pudra-user,x-pudra-role"};
   const sendJson=(res,status,data)=>{res.writeHead(status,{"content-type":"application/json; charset=utf-8","cache-control":"no-store",...corsHeaders});res.end(JSON.stringify(data));};
@@ -95,7 +95,7 @@ export function createStockApp(deps) {
       }
     }
 
-    const exact=/^\d{8,14}$/.test(s);
+    const exact=/^\d{8,14}$/.test(s) || verifiedAlternateToPrimary.has(s);
     let matched=rawArticles.filter(a=>{
       const vals=[a.Name,a.name,a.Barcode,a.barcode,a.Code,a.code,...articleBarcodes(a)].map(v=>String(v||"").toLowerCase());
       if(exact && JSON.stringify(a).includes(s)) return true;

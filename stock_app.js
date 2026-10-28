@@ -169,6 +169,14 @@ export function createStockApp(deps) {
     if(req.method==="GET"&&url.pathname==="/stock/api/meta"){
       const rawDepots=await getDepots(false);const ds=rawDepots.map(simpleDepot).filter(d=>d.id && allowedDepotName(d.name));sendJson(res,200,{depots:ds,user:a.user,role:a.role});return true;
     }
+    if(req.method==="GET"&&url.pathname==="/stock/api/article-ids") {
+      if(!a.admin){sendJson(res,403,{error:"Только администратор"});return true;}
+      const offset=Math.max(0,Math.trunc(Number(url.searchParams.get("offset"))||0));
+      const limit=Math.min(500,Math.max(1,Math.trunc(Number(url.searchParams.get("limit"))||250)));
+      const raw=await getArticles(false);
+      const products=raw.slice(offset,offset+limit).map(x=>({id:idOf(x),barcode:String(x.Barcode??x.barcode??""),code:String(x.Code??x.code??""),name:String(x.Name??x.name??"")})).filter(x=>x.id);
+      sendJson(res,200,{total:raw.length,offset,nextOffset:offset+products.length,products});return true;
+    }
     if(req.method==="GET"&&url.pathname==="/stock/api/barcode-sync-status") {
       if(!a.admin) {sendJson(res,403,{error:"Только администратор"});return true;}
       sendJson(res,200,getAlternateIndexStatus());return true;

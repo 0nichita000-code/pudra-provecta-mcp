@@ -1220,7 +1220,9 @@ function createMcpServer() {
     inputSchema: { dateFrom: z.string(), dateTo: z.string().optional(), operationTypes: z.array(z.string()).optional(), limit: z.number().int().min(1).max(5000).optional() },
     annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: true }
   }, async ({ dateFrom, dateTo, operationTypes = [], limit = 1000 }) => {
-    let docs = await getDocuments(dateFrom, dateTo || dateFrom);
+    let docs = dateFrom === "__PENDING__"
+      ? asArray(await apiGet("/v1/stock/document/select", {})).filter(d => !(d.ApprovedOn ?? d.approvedOn))
+      : await getDocuments(dateFrom, dateTo || dateFrom);
     if (operationTypes.length) { const s = new Set(operationTypes.map(x => x.toLowerCase())); docs = docs.filter(d => s.has(String(docOperation(d)).toLowerCase())); }
     const ops = [...new Set(docs.map(docOperation).filter(Boolean))];
     return jsonReply({ count: Math.min(docs.length, limit), total: docs.length, operationTypes: ops, documents: docs.slice(0, limit) });
@@ -1270,7 +1272,9 @@ function createMcpServer() {
     annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: true }
   }, async ({ dateFrom, dateTo, documentIds = [], articleIds = [], limit = 3000 }) => {
     let lots = [];
-    if (articleIds.length > 20 && documentIds.length === 0) {
+    if (dateFrom === "__PENDING__" && documentIds.length) {
+      lots = asArray(await apiGet("/v1/stock/lot/select", { documentId: documentIds, lotArticleId: articleIds }));
+    } else if (articleIds.length > 20 && documentIds.length === 0) {
       for (let i = 0; i < articleIds.length; i += 20) {
         const part = await getLots(dateFrom, dateTo || dateFrom, { lotArticleId: articleIds.slice(i, i + 20) });
         lots.push(...part);

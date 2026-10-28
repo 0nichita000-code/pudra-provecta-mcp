@@ -1287,7 +1287,13 @@ function createMcpServer() {
     } else {
       lots = await getLots(dateFrom, dateTo || dateFrom, { documentId: documentIds, lotArticleId: articleIds });
     }
-    return jsonReply({ count: Math.min(lots.length, limit), total: lots.length, lots: lots.slice(0, limit) });
+    await getArticles(false);
+    const enriched = lots.slice(0, limit).map(l => {
+      const aid = lotArticleId(l);
+      const a = articleCache.byId.get(aid) || {};
+      return { ...l, ArticleInfo: simpleArticle(a) };
+    });
+    return jsonReply({ count: Math.min(lots.length, limit), total: lots.length, lots: enriched });
   });
 
   return mcp;

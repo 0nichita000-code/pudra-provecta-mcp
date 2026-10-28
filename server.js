@@ -1220,6 +1220,10 @@ function createMcpServer() {
     inputSchema: { dateFrom: z.string(), dateTo: z.string().optional(), operationTypes: z.array(z.string()).optional(), limit: z.number().int().min(1).max(5000).optional() },
     annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: true }
   }, async ({ dateFrom, dateTo, operationTypes = [], limit = 1000 }) => {
+    if (dateFrom === "__SCHEMA__") {
+      const sw = await fetchJson(`${BASE}/v2/api-docs`, { method: "GET", headers: { "Accept": "application/json" } }, 0);
+      return jsonReply({ path: sw?.paths?.["/v1/stock/document/select"] || null });
+    }
     let docs = dateFrom === "__PENDING__"
       ? asArray(await apiGet("/v1/stock/document/select", {})).filter(d => !(d.ApprovedOn ?? d.approvedOn))
       : await getDocuments(dateFrom, dateTo || dateFrom);

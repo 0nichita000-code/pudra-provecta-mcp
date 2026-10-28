@@ -1173,6 +1173,47 @@ function createMcpServer() {
     });
   });
 
+  mcp.registerTool("pending_documents", {
+    title: "Pending Provecta documents",
+    description: "Return unapproved Provecta documents, optionally filtered by depot and operation type.",
+    inputSchema: {
+      depotIds: z.array(z.string()).optional(),
+      operationTypes: z.array(z.string()).optional(),
+      limit: z.number().int().min(1).max(5000).optional()
+    },
+    annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: true }
+  }, async ({ depotIds = [], operationTypes = [], limit = 1000 }) => {
+    let docs = asArray(await apiGet("/v1/stock/document/select", {}));
+    docs = docs.filter(d => !(d.ApprovedOn ?? d.approvedOn));
+    if (depotIds.length) {
+      const set = new Set(depotIds.map(String));
+      docs = docs.filter(d => {
+        const ids = [idOf(d.CreditDepot), idOf(d.DebitDepot), docDepotId(d)].filter(Boolean);
+        return ids.some(x => set.has(String(x)));
+      });
+    }
+    if (operationTypes.length) {
+      const set = new Set(operationTypes.map(x => String(x).toLowerCase()));
+      docs = docs.filter(d => set.has(String(docOperation(d)).toLowerCase()));
+    }
+    return jsonReply({ count: Math.min(docs.length, limit), total: docs.length, documents: docs.slice(0, limit) });
+  });
+
+  mcp.registerTool("pending_document_lots", {
+    title: "Pending document lines",
+    description: "Return Provecta lot lines for specific pending document IDs.",
+    inputSchema: {
+      documentIds: z.array(z.string()).min(1),
+      limit: z.number().int().min(1).max(10000).optional()
+    },
+    annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: true }
+  }, async ({ documentIds, limit = 10000 }) => {
+    const lots = asArray(await apiGet("/v1/stock/lot/select", { documentId: documentIds }));
+    const set = new Set(documentIds.map(String));
+    const rows = lots.filter(l => set.has(String(lotDocId(l)))).slice(0, limit);
+    return jsonReply({ count: rows.length, rows });
+  });
+
   mcp.registerTool("recent_documents", {
     title: "Provecta documents for a period",
     description: "Read Provecta documents for a date range. Useful for diagnostics, sales calibration, receipts and transfers.",

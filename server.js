@@ -1226,7 +1226,7 @@ function createMcpServer() {
       return jsonReply({ paths: hits });
     }
     let docs = dateFrom === "__PENDING__"
-      ? asArray(await apiGet("/v1/stock/document/select", {})).filter(d => !(d.ApprovedOn ?? d.approvedOn))
+      ? asArray(await apiGet("/v1/stock/document/select", { documentApprovedOnIsNull: true })).filter(d => !(d.ApprovedOn ?? d.approvedOn))
       : await getDocuments(dateFrom, dateTo || dateFrom);
     if (operationTypes.length) { const s = new Set(operationTypes.map(x => x.toLowerCase())); docs = docs.filter(d => s.has(String(docOperation(d)).toLowerCase())); }
     const ops = [...new Set(docs.map(docOperation).filter(Boolean))];

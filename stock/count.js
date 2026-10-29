@@ -3,10 +3,10 @@
 const $=id=>document.getElementById(id), BASE="https://pudra-provecta-mcp.onrender.com";
 let current=null, stream=null, scanLoop=null, busy=false, zxingReader=null, zxingControls=null;
 const escape=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
-function profile(){try{return JSON.parse(localStorage.getItem("pudraStockLogin")||"{}")}catch{return {}}}
+function profile(){try{const x=JSON.parse(localStorage.getItem("pudraStockLogin")||"{}");if(x.role==="staff")x.pin=sessionStorage.getItem("pudraStoreSession")||"";return x}catch{return {}}}
 function depot(){return $("myDepot").value}
 async function request(path,method="GET",data=null){
- const u=profile(),r=await fetch(BASE+path,{method,headers:{"content-type":"application/json","x-pudra-user":encodeURIComponent(u.user||""),"x-pudra-role":u.role||"staff","x-pudra-pin":u.pin||""},body:data===null?undefined:JSON.stringify(data)});
+ const u=profile(),r=await fetch(BASE+path,{method,headers:{"content-type":"application/json","x-pudra-user":encodeURIComponent(u.user||""),"x-pudra-role":u.role||"staff","x-pudra-pin":u.pin||"","x-pudra-depot":u.depotId||""},body:data===null?undefined:JSON.stringify(data)});
  const v=await r.json().catch(()=>({}));if(!r.ok)throw Error(v.error||"Ошибка "+r.status);return v;
 }
 function msg(s){$("countInfo").textContent=s}
@@ -34,7 +34,9 @@ async function initialize(){
  const options=m.depots.map(d=>'<option value="'+escape(d.id)+'">'+escape(d.name)+'</option>').join("");
  const previous=localStorage.getItem("pudraMyDepot")||"";
  $("myDepot").innerHTML=options;$("countUploadDepot").innerHTML=options;
- if(m.depots.some(d=>d.id===previous))$("myDepot").value=previous;
+ $("myDepot").disabled=p.role!=="admin";
+ if(p.role==="staff"&&m.depots.some(d=>d.id===p.depotId))$("myDepot").value=p.depotId;
+ else if(m.depots.some(d=>d.id===previous))$("myDepot").value=previous;
  localStorage.setItem("pudraMyDepot",depot());
  $("countAdmin").classList.toggle("hidden",p.role!=="admin");
  await refresh();

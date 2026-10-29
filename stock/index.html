@@ -56,11 +56,11 @@ video{width:100%;height:210px;border-radius:16px;background:#000;object-fit:cove
     </div>
   </section>
 
-  <main id="app" class="hidden">
+  <main id="app" class="hidden"><div class="card" style="padding:10px 14px"><label style="font-weight:800">Мой магазин <select id="myDepot"></select></label></div>
     <div class="tabs">
       <button class="tab active ghost" data-tab="searchTab">Поиск</button>
       <button class="tab ghost" data-tab="scanTab">Сканер</button>
-      <button class="tab ghost" data-tab="inventoryTab">Все остатки</button>
+      <button class="tab ghost" data-tab="inventoryTab">Все остатки</button><button class="tab ghost" data-tab="countTab">Приёмка / Подсчёт</button>
       <button class="tab ghost adminOnly" data-tab="salesTab">Продажи</button>
       <button class="tab ghost adminOnly" data-tab="adminTab">Заявки</button>
       <button class="tab ghost adminOnly" data-tab="diffTab">Расхождения</button>
@@ -119,6 +119,7 @@ video{width:100%;height:210px;border-radius:16px;background:#000;object-fit:cove
       </div>
     </section>
 
+    <section id="countTab" class="tabPanel hidden"><div class="card"><h3>Приёмка и инвентаризация</h3><div id="countInfo" class="muted">Выберите магазин</div><div id="countDocs"></div><div id="countEditor" class="hidden"><button id="countBack" class="ghost">← К документам</button><h3 id="countTitle"></h3><input id="countFind" placeholder="Штрихкод или название"><button class="primary" id="countScan" style="margin-top:8px">Сканировать штрихкод</button><div id="countLines"></div><button id="countExport" class="dark" style="width:100%;margin-top:12px">Скачать результаты CSV</button></div></div><div id="countAdmin" class="card adminOnly hidden"><h3>Загрузить документ продавцам</h3><p class="muted">CSV с колонками: НАЗВАНИЕ, ШТРИХКОД, КОЛИЧЕСТВО. Excel можно сохранить в формате CSV UTF-8.</p><input id="countDocName" placeholder="Название поставки"><select id="countUploadDepot"></select><select id="countDocType"><option value="receipt">Приёмка товара</option><option value="inventory">Инвентаризация</option></select><input id="countFile" type="file" accept=".csv,text/csv"><button id="countUpload" class="primary" style="margin-top:8px">Загрузить для магазина</button><div id="countUploadInfo"></div></div></section>
     <section id="salesTab" class="tabPanel hidden adminOnly">
       <div class="card">
         <div class="row">
@@ -164,6 +165,6 @@ setTimeout(function(){
   if(s){s.classList.add("ready");setTimeout(function(){s.classList.add("hidden")},320);}
 },2500);
 </script>
-<script src="./app.js?v=20261023-1655"></script>
+<script src="./app.js?v=20261029-1940"></script>
 </body>
 </html>

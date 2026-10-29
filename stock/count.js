@@ -88,25 +88,26 @@ async function upload(){
  if($("countUploadDepot").value===depot())refresh();
  }catch(e){$("countUploadInfo").textContent="Не загружено: "+e.message}
 }
+async function ensureScannerLibrary(){
+ if(window.ZXingBrowser?.BrowserMultiFormatReader)return;
+ const sources=["https://pudra-provecta-mcp.onrender.com/stock/zxing.js","https://cdn.jsdelivr.net/npm/@zxing/browser@0.1.5/umd/zxing-browser.min.js"];
+ for(const src of sources){
+  try{await new Promise((resolve,reject)=>{const el=document.createElement("script");el.src=src+"?refresh="+Date.now();el.onload=resolve;el.onerror=()=>reject(Error("Скрипт не загрузился"));document.head.appendChild(el);setTimeout(()=>reject(Error("Превышено время загрузки")),10000)});if(window.ZXingBrowser?.BrowserMultiFormatReader)return}catch(e){console.warn("PUDRA scanner source",src,e)}
+ }
+ throw Error("Библиотека сканирования не загрузилась. Проверьте интернет и повторите.");
+}
 async function camera(){
  if(!current)return;
  if(stream||zxingControls){stopCamera();return}
  try{
- const wrap=document.createElement("div");wrap.id="countCameraBox";wrap.style="margin:10px 0";wrap.innerHTML='<video id="countVideo" playsinline autoplay muted style="width:100%;height:180px;background:#111"></video><button id="countStop" class="ghost">Остановить камеру</button>'; $("countFind").after(wrap);$("countStop").onclick=stopCamera;
- stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:"environment"}},audio:false});$("countVideo").srcObject=stream;await $("countVideo").play().catch(()=>{});
- const gotCode=code=>{if(!code||!current||busy)return;busy=true;$("countFind").value=String(code).trim();render();stopCamera();if(!current.items.some(x=>x.barcode===String(code).trim()))alert("Товара нет в документе: "+code);setTimeout(()=>busy=false,350)};
- let started=false;
- if(window.ZXingBrowser?.BrowserMultiFormatReader){
-   zxingReader=new window.ZXingBrowser.BrowserMultiFormatReader();
-   zxingControls=await zxingReader.decodeFromStream(stream,$("countVideo"),result=>{if(result)gotCode(result.getText?result.getText():result.text)});
-   started=true;
- }
- if("BarcodeDetector" in window){
-  try{const detector=new BarcodeDetector({formats:["ean_13","ean_8","code_128","upc_a","code_39","itf"]});
-   scanLoop=setInterval(async()=>{if(busy||!stream)return;try{const v=await detector.detect($("countVideo"));if(v[0]?.rawValue)gotCode(v[0].rawValue)}catch{}},300);started=true
-  }catch{}
- }
- if(!started)throw Error("Не удалось запустить сканер. Проверьте разрешение камеры.");
+ await ensureScannerLibrary();
+ const wrap=document.createElement("div");wrap.id="countCameraBox";wrap.style="margin:10px 0";wrap.innerHTML='<video id="countVideo" playsinline autoplay muted style="width:100%;height:180px;background:#111"></video><button id="countStop" class="ghost">Остановить камеру</button>';
+ $("countFind").after(wrap);$("countStop").onclick=stopCamera;
+ stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:"environment"}},audio:false});
+ $("countVideo").srcObject=stream;await $("countVideo").play().catch(()=>{});
+ const gotCode=code=>{if(!code||!current||busy)return;busy=true;const scanned=String(code).trim();$("countFind").value=scanned;render();stopCamera();if(!current.items.some(x=>x.barcode===scanned))alert("Товара нет в документе: "+scanned);setTimeout(()=>busy=false,350)};
+ zxingReader=new window.ZXingBrowser.BrowserMultiFormatReader();
+ zxingControls=await zxingReader.decodeFromStream(stream,$("countVideo"),result=>{if(result)gotCode(result.getText?result.getText():result.text)});
  }catch(e){stopCamera();alert("Ошибка камеры: "+e.message)}
 }
 function stopCamera(){if(scanLoop)clearInterval(scanLoop);scanLoop=null;try{zxingControls?.stop()}catch{}zxingControls=null;try{zxingReader?.reset?.()}catch{}zxingReader=null;if(stream)stream.getTracks().forEach(t=>t.stop());stream=null;$("countCameraBox")?.remove()}

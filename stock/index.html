@@ -50,7 +50,7 @@ video{width:100%;height:210px;border-radius:16px;background:#000;object-fit:cove
     <div class="stack">
       <input id="userName" placeholder="Имя сотрудника">
       <select id="role"><option value="staff">Продавец</option><option value="admin">Администратор</option></select>
-      <div id="pinWrap"><input id="pin" type="password" inputmode="numeric" placeholder="PIN администратора"></div>
+      <div id="staffStoreWrap"><label>Магазин<select id="loginStore"><option value="">Выберите магазин</option></select></label><label style="display:block;margin-top:10px">Пароль магазина<input id="staffStorePassword" type="password" autocomplete="off" placeholder="Пароль вашего магазина"></label></div><div id="pinWrap"><input id="pin" type="password" inputmode="numeric" placeholder="PIN администратора"></div>
       <button id="loginBtn" class="primary">Войти</button>
       <div id="loginMsg"></div>
     </div>
@@ -165,6 +165,6 @@ setTimeout(function(){
   if(s){s.classList.add("ready");setTimeout(function(){s.classList.add("hidden")},320);}
 },2500);
 </script>
-<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script><script src="./app.js?v=20261029-1940"></script><script src="./count.js?v=20261029-ioscamera3"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script><script src="./app.js?v=20261029-stores1"></script><script src="./count.js?v=20261029-ioscamera3"></script>
 </body>
 </html>

@@ -1,7 +1,7 @@
 (()=>{
 "use strict";
 const $=id=>document.getElementById(id), BASE="https://pudra-provecta-mcp.onrender.com";
-let current=null, stream=null, scanLoop=null, busy=false;
+let current=null, stream=null, scanLoop=null, busy=false, zxingReader=null, zxingControls=null;
 const escape=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 function profile(){try{return JSON.parse(localStorage.getItem("pudraStockLogin")||"{}")}catch{return {}}}
 function depot(){return $("myDepot").value}
@@ -90,16 +90,26 @@ async function upload(){
 }
 async function camera(){
  if(!current)return;
- if(stream){stopCamera();return}
+ if(stream||zxingControls){stopCamera();return}
  try{
  const wrap=document.createElement("div");wrap.id="countCameraBox";wrap.style="margin:10px 0";wrap.innerHTML='<video id="countVideo" playsinline autoplay muted style="width:100%;height:180px;background:#111"></video><button id="countStop" class="ghost">Остановить камеру</button>'; $("countFind").after(wrap);$("countStop").onclick=stopCamera;
- stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:"environment"}},audio:false});$("countVideo").srcObject=stream;
- if(!("BarcodeDetector" in window))throw Error("На этом телефоне камера для данного режима недоступна. Используйте ручной ввод штрихкода.");
- const detector=new BarcodeDetector({formats:["ean_13","ean_8","code_128","upc_a","code_39","itf"]});
- scanLoop=setInterval(async()=>{if(busy||!stream)return;busy=true;try{const v=await detector.detect($("countVideo"));if(v[0]?.rawValue){const code=v[0].rawValue;$("countFind").value=code;render();stopCamera();if(!current.items.some(x=>x.barcode===code))alert("Товара нет в документе: "+code)}}catch{}finally{busy=false}},300);
- }catch(e){stopCamera();alert(e.message)}
+ stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:"environment"}},audio:false});$("countVideo").srcObject=stream;await $("countVideo").play().catch(()=>{});
+ const gotCode=code=>{if(!code||!current||busy)return;busy=true;$("countFind").value=String(code).trim();render();stopCamera();if(!current.items.some(x=>x.barcode===String(code).trim()))alert("Товара нет в документе: "+code);setTimeout(()=>busy=false,350)};
+ let started=false;
+ if(window.ZXingBrowser?.BrowserMultiFormatReader){
+   zxingReader=new window.ZXingBrowser.BrowserMultiFormatReader();
+   zxingControls=await zxingReader.decodeFromStream(stream,$("countVideo"),result=>{if(result)gotCode(result.getText?result.getText():result.text)});
+   started=true;
+ }
+ if("BarcodeDetector" in window){
+  try{const detector=new BarcodeDetector({formats:["ean_13","ean_8","code_128","upc_a","code_39","itf"]});
+   scanLoop=setInterval(async()=>{if(busy||!stream)return;try{const v=await detector.detect($("countVideo"));if(v[0]?.rawValue)gotCode(v[0].rawValue)}catch{}},300);started=true
+  }catch{}
+ }
+ if(!started)throw Error("Не удалось запустить сканер. Проверьте разрешение камеры.");
+ }catch(e){stopCamera();alert("Ошибка камеры: "+e.message)}
 }
-function stopCamera(){if(scanLoop)clearInterval(scanLoop);scanLoop=null;if(stream)stream.getTracks().forEach(t=>t.stop());stream=null;$("countCameraBox")?.remove()}
+function stopCamera(){if(scanLoop)clearInterval(scanLoop);scanLoop=null;try{zxingControls?.stop()}catch{}zxingControls=null;try{zxingReader?.reset?.()}catch{}zxingReader=null;if(stream)stream.getTracks().forEach(t=>t.stop());stream=null;$("countCameraBox")?.remove()}
 $("myDepot").onchange=()=>{localStorage.setItem("pudraMyDepot",depot());stopCamera();refresh()};
 $("countBack").onclick=()=>{stopCamera();refresh()};
 $("countFind").oninput=render;

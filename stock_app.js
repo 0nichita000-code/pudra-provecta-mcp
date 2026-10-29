@@ -190,7 +190,7 @@ export function createStockApp(deps) {
         sendJson(res,201,{id:doc.id});return true;
       }
     }
-    if(/^\\/stock\\/api\\/count-documents\\/[0-9]+$/.test(url.pathname)){
+    if(url.pathname.startsWith("/stock/api/count-documents/") && /^[0-9]+$/.test(url.pathname.split("/").pop())){
       const id=url.pathname.split("/").pop(),db=await workflowRead(),doc=db.documents.find(x=>x.id===id);
       if(!doc){sendJson(res,404,{error:"Документ не найден"});return true;}
       const depot=url.searchParams.get("depotId")||"";

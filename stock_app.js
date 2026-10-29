@@ -32,8 +32,11 @@ export function createStockApp(deps) {
     let user=String(req.headers["x-pudra-user"]||"").trim(); try{user=decodeURIComponent(user);}catch{} user=user||"Сотрудник";
     const role=String(req.headers["x-pudra-role"]||"staff");
     const admin=role==="admin"&&pin===ADMIN_PIN;
-    const ok=admin || role!=="admin";
-    return {ok,admin,user,role:admin?"admin":"staff"};
+    const depotId=String(req.headers["x-pudra-depot"]||"");
+    let storeCodes={};try{storeCodes=JSON.parse(process.env.STOCK_STORE_PASSWORDS||"{}")}catch{}
+    const matched=Object.entries(storeCodes).some(([depot,code])=>depot===depotId&&typeof code==="string"&&code.length>=8&&code===pin);
+    const ok=admin || (role==="staff"&&matched);
+    return {ok,admin,user,role:admin?"admin":"staff",depotId:admin?"":depotId};
   };
   const readBody=async req=>{const xs=[];let n=0;for await(const c of req){n+=c.length;if(n>256000)throw new Error("Body too large");xs.push(c);}const raw=Buffer.concat(xs).toString("utf8");return raw?JSON.parse(raw):{};};
   const depotName=(ds,id)=>ds.find(d=>d.id===id)?.name||id;
@@ -172,12 +175,13 @@ export function createStockApp(deps) {
     }
     if(!url.pathname.startsWith("/stock/api/"))return false;
     if(req.method==="OPTIONS"){res.writeHead(204,corsHeaders);res.end();return true;}
+    if(req.method==="GET"&&url.pathname==="/stock/api/stores"){const rawDepots=await getDepots(false);sendJson(res,200,{depots:rawDepots.map(simpleDepot).filter(d=>d.id && allowedDepotName(d.name))});return true;}
     const a=authInfo(req); if(!a.ok){sendJson(res,401,{error:"Неверный PIN"});return true;}
 
     if(url.pathname==="/stock/api/count-documents"){
       if(req.method==="GET"){
         const depot=url.searchParams.get("depotId")||"";const db=await workflowRead();
-        sendJson(res,200,{items:db.documents.filter(x=>a.admin||x.depotId===depot).map(x=>({id:x.id,title:x.title,type:x.type,depotId:x.depotId,status:x.status,createdAt:x.createdAt,items:x.items.length,checked:x.items.filter(y=>y.actual!==null).length}))});return true;
+        sendJson(res,200,{items:db.documents.filter(x=>a.admin||(x.depotId===depot&&depot===a.depotId)).map(x=>({id:x.id,title:x.title,type:x.type,depotId:x.depotId,status:x.status,createdAt:x.createdAt,items:x.items.length,checked:x.items.filter(y=>y.actual!==null).length}))});return true;
       }
       if(req.method==="POST"){
         if(!a.admin){sendJson(res,403,{error:"Только администратор может загружать документы"});return true;}
@@ -194,7 +198,7 @@ export function createStockApp(deps) {
       const id=url.pathname.split("/").pop(),db=await workflowRead(),doc=db.documents.find(x=>x.id===id);
       if(!doc){sendJson(res,404,{error:"Документ не найден"});return true;}
       const depot=url.searchParams.get("depotId")||"";
-      if(!a.admin&&depot!==doc.depotId){sendJson(res,403,{error:"Документ другого магазина"});return true;}
+      if(!a.admin&&(depot!==doc.depotId||a.depotId!==doc.depotId)){sendJson(res,403,{error:"Документ другого магазина"});return true;}
       if(req.method==="GET"){sendJson(res,200,{document:doc});return true;}
       if(req.method==="PATCH"){
         if(doc.status!=="OPEN"){sendJson(res,409,{error:"Документ закрыт"});return true;}

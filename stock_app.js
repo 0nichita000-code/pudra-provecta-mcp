@@ -10,6 +10,13 @@ export function createStockApp(deps) {
   const STAFF_PIN = process.env.STOCK_STAFF_PIN || "1357";
   const transfers = [];
   const discrepancies = [];
+  // PUDRA employee count workflows. For production use configure STOCK_WORKFLOW_PATH on a persistent disk.
+  const workflowPath=process.env.STOCK_WORKFLOW_PATH||"/tmp/pudra-stock-workflows.json";
+  let workflowCache=null, workflowLock=Promise.resolve();
+  async function workflowRead(){if(workflowCache)return workflowCache;try{workflowCache=JSON.parse(await fs.readFile(workflowPath,"utf8"));}catch{workflowCache={documents:[]};}return workflowCache;}
+  function workflowWrite(fn){const task=workflowLock.then(async()=>{const db=await workflowRead();const result=await fn(db);await fs.mkdir(path.dirname(workflowPath),{recursive:true});await fs.writeFile(workflowPath+".tmp",JSON.stringify(db));await fs.rename(workflowPath+".tmp",workflowPath);return result;});workflowLock=task.catch(()=>{});return task;}
+  function goodCount(x){const n=Number(x);return Number.isFinite(n)&&n>=0&&n<=1e7?n:null;}
+
   // Verified Provecta UI alternate barcode that the public article API omits.
   const verifiedAlternateToPrimary = new Map([["6924372614143","2100000044726"],["6924372615744","2100000044726"],["6924372634066","2100000044726"],["6924372635735","2100000044726"],["6932588302112","2100000044726"],["6933836103710","2100000044726"],["6933836130426","2100000044726"],["6933836130471","2100000044726"],["6933836132567","2100000044726"],["6970916455208","2100000044726"],["6971846332096","2100000044726"],["6972857301125","2100000044726"],["6972857378127","2100000044726"],["6975006664423","2100000044726"],["6982732511013","2100000044726"],["6982732511068","2100000044726"],["6982732597956","2100000044726"],["fl5-35t29","2100000044726"],["0000022089717","2100000044368"],["0083078003036","0083078021337"],["0083078003067","0083078021337"],["0083078003098","0083078021337"],["0083078009557","0083078021337"],["0083078010775","0083078021337"],["0083078010805","0083078021337"],["0083078013837","0083078021337"],["0083078014247","0083078021337"],["0083078015763","0083078021337"],["0083078015831","0083078021337"],["0083078018634","0083078021337"],["0083078019044","0083078021337"],["083078003036","0083078021337"],["083078003067","0083078021337"],["083078003098","0083078021337"],["083078009557","0083078021337"],["083078013837","0083078021337"],["083078014247","0083078021337"],["083078015831","0083078021337"],["083078019044","0083078021337"],["083078021337","0083078021337"],["083078113148","0083078021337"],["4743318106793","4743318106786"],["4743318106809","4743318106786"],["8809591350332","8809975194439"],["2000000027968","2100000047758"],["6942850536053","6905145041052"],["6942850536015","6905145041014"],["7894522085736","7894522085743"],["6905145041069","6942850536039"],["4820125773551","2100000050659"],["4820125774176","2100000050659"],["4820125940625","2100000050659"],["4820125940663","2100000050659"],["4820125940670","2100000050659"],["4820125940687","2100000050659"],["4820125944012","2100000050659"],["4820125944029","2100000050659"],["4820125956800","2100000050659"],["4820125956817","2100000050659"],["633911749326","0633911749326"],["0633911778784","633911778784"],["0633911778722","633911778722"],["633911778869","0633911778869"],["633911631904","0633911631904"],["633911731383","0633911731383"],["633911788134","0633911788134"],["6955210817440","2100000049851"],["4841512013500","2100000049899"],["4841512013517","2100000049899"],["4841512013524","2100000049899"],["4841512013555","2100000049899"],["4841512013586","2100000049899"],["4841512013593","2100000049899"],["4841512013616","2100000049899"],["4841512013753","2100000049899"],["4841512013821","2100000049899"],["4841512013838","2100000049899"],["4841512013845","2100000049899"],["4841512013852","2100000049899"],["4841512049042","2100000049899"],["5903957303390","5903957303383"],["5903957305530","5903957304335"],["6942366101066","2100000050116"],["4810151013240","4810151013233"],["6970975182831","6970975197675"]]);
 
@@ -166,6 +173,37 @@ export function createStockApp(deps) {
     if(!url.pathname.startsWith("/stock/api/"))return false;
     if(req.method==="OPTIONS"){res.writeHead(204,corsHeaders);res.end();return true;}
     const a=authInfo(req); if(!a.ok){sendJson(res,401,{error:"Неверный PIN"});return true;}
+
+    if(url.pathname==="/stock/api/count-documents"){
+      if(req.method==="GET"){
+        const depot=url.searchParams.get("depotId")||"";const db=await workflowRead();
+        sendJson(res,200,{items:db.documents.filter(x=>a.admin||x.depotId===depot).map(x=>({id:x.id,title:x.title,type:x.type,depotId:x.depotId,status:x.status,createdAt:x.createdAt,items:x.items.length,checked:x.items.filter(y=>y.actual!==null).length}))});return true;
+      }
+      if(req.method==="POST"){
+        if(!a.admin){sendJson(res,403,{error:"Только администратор может загружать документы"});return true;}
+        const b=await readBody(req);const {ds}=await catalogs();
+        if(!ds.some(d=>d.id===b.depotId)||!["receipt","inventory"].includes(b.type)){sendJson(res,400,{error:"Укажите магазин и вид проверки"});return true;}
+        if(!Array.isArray(b.items)||b.items.length>8000||!b.items.length){sendJson(res,400,{error:"Документ пуст или слишком большой"});return true;}
+        const items=b.items.map(x=>({name:String(x.name||"").slice(0,300),barcode:String(x.barcode||"").trim().slice(0,70),expected:goodCount(x.expected),actual:null,updatedBy:"",updatedAt:""}));
+        if(items.some(x=>!x.barcode||x.expected===null)){sendJson(res,400,{error:"Требуется штрихкод и корректное количество"});return true;}
+        const doc=await workflowWrite(db=>{const v={id:String(Date.now())+String(Math.floor(Math.random()*100000)),title:String(b.title||"Приёмка").slice(0,150),type:b.type,depotId:b.depotId,status:"OPEN",createdAt:new Date().toISOString(),items};db.documents.unshift(v);return v;});
+        sendJson(res,201,{id:doc.id});return true;
+      }
+    }
+    if(/^\\/stock\\/api\\/count-documents\\/[0-9]+$/.test(url.pathname)){
+      const id=url.pathname.split("/").pop(),db=await workflowRead(),doc=db.documents.find(x=>x.id===id);
+      if(!doc){sendJson(res,404,{error:"Документ не найден"});return true;}
+      const depot=url.searchParams.get("depotId")||"";
+      if(!a.admin&&depot!==doc.depotId){sendJson(res,403,{error:"Документ другого магазина"});return true;}
+      if(req.method==="GET"){sendJson(res,200,{document:doc});return true;}
+      if(req.method==="PATCH"){
+        if(doc.status!=="OPEN"){sendJson(res,409,{error:"Документ закрыт"});return true;}
+        const b=await readBody(req);const n=goodCount(b.actual);const index=Number(b.index);
+        if(!Number.isInteger(index)||index<0||index>=doc.items.length||n===null){sendJson(res,400,{error:"Некорректное количество или позиция"});return true;}
+        await workflowWrite(db=>{const x=db.documents.find(v=>v.id===id).items[index];x.actual=n;x.updatedBy=a.user;x.updatedAt=new Date().toISOString();});
+        sendJson(res,200,{ok:true});return true;
+      }
+    }
     if(req.method==="GET"&&url.pathname==="/stock/api/meta"){
       const rawDepots=await getDepots(false);const ds=rawDepots.map(simpleDepot).filter(d=>d.id && allowedDepotName(d.name));sendJson(res,200,{depots:ds,user:a.user,role:a.role});return true;
     }

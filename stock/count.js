@@ -66,9 +66,18 @@ function render(){
  try{await request("/stock/api/count-documents/"+current.id+"?depotId="+encodeURIComponent(depot()),"PATCH",{index:i,actual:Number(n)});current.items[i].actual=Number(n);render()}catch(e){alert(e.message)}});
 }
 async function upload(){
- const file=$("countFile").files[0];const pasted=$("countPaste").value.trim();if(!file&&!pasted){alert("Выберите CSV-файл или вставьте таблицу");return}
+ const file=$("countFile").files[0];const pasted=$("countPaste").value.trim();if(!file&&!pasted){alert("Выберите Excel/CSV или вставьте таблицу");return}
  try{
- const arr=tableCSV(pasted||await file.text());const hdr=arr.shift().map(s=>s.trim().toLowerCase());
+ let arr;
+ if(pasted){arr=tableCSV(pasted);}
+ else if(/\\.xlsx?$/i.test(file.name)){
+   if(!window.XLSX)throw Error("Модуль Excel не загрузился. Откройте приложение в Safari и повторите.");
+   const wb=window.XLSX.read(await file.arrayBuffer(),{type:"array",raw:true});
+   const sheet=wb.Sheets[wb.SheetNames[0]];
+   arr=window.XLSX.utils.sheet_to_json(sheet,{header:1,defval:"",raw:true}).map(row=>row.map(v=>String(v??"")));
+ }else{arr=tableCSV(await file.text());}
+ if(!arr.length)throw Error("Файл пуст.");
+ const hdr=arr.shift().map(s=>s.trim().toLowerCase());
  const find=terms=>hdr.findIndex(s=>terms.some(t=>s.includes(t)));
  const n=find(["назван","name","denum"]),b=find(["штрих","barcode","cod de bare"]),q=find(["колич","quantity","cantitat"]);
  if(n<0||b<0||q<0)throw Error("Нужны столбцы НАЗВАНИЕ, ШТРИХКОД, КОЛИЧЕСТВО");

@@ -261,7 +261,7 @@ export function createStockApp(deps) {
       }
     }
     if(req.method==="POST"&&url.pathname==="/stock/api/transfers"){
-      const b=await readBody(req);const p=await findProduct(b.productId,b.barcode);if(!p){sendJson(res,404,{error:"Товар не найден"});return true;}
+      const b=await readBody(req);if(!a.admin&&b.toDepotId!==a.depotId){sendJson(res,403,{error:"Вы можете запрашивать товар только для своего магазина"});return true;}const p=await findProduct(b.productId,b.barcode);if(!p){sendJson(res,404,{error:"Товар не найден"});return true;}
       const {ds}=await catalogs();const qty=Math.trunc(Number(b.quantity));const err=transferError(p,ds,b.fromDepotId,b.toDepotId,qty);if(err){sendJson(res,400,{error:err});return true;}
       const dupe=transfers.find(x=>x.product_id===p.id&&x.from_depot_id===b.fromDepotId&&x.to_depot_id===b.toDepotId&&["NEW","APPROVED","PICKING","SENT"].includes(x.status));
       if(dupe){sendJson(res,409,{error:`Уже есть активная заявка №${dupe.id} по этому товару и направлению.`});return true;}
@@ -284,7 +284,7 @@ export function createStockApp(deps) {
       const id=url.pathname.split("/").pop(),row=transfers.find(x=>String(x.id)===id);if(row)row.status=b.status;sendJson(res,200,{item:row});return true;
     }
     if(req.method==="POST"&&url.pathname==="/stock/api/discrepancies"){
-      const b=await readBody(req),p=await findProduct(b.productId,b.barcode);if(!p){sendJson(res,404,{error:"Товар не найден"});return true;}
+      const b=await readBody(req);if(!a.admin&&b.depotId!==a.depotId){sendJson(res,403,{error:"Можно сообщать расхождения только своего магазина"});return true;}const p=await findProduct(b.productId,b.barcode);if(!p){sendJson(res,404,{error:"Товар не найден"});return true;}
       const {ds}=await catalogs();const systemQty=Number(p.stocks.find(x=>x.depotId===b.depotId)?.quantity||0),actualQty=Number(b.actualQty);
       if(!Number.isFinite(actualQty)||actualQty<0){sendJson(res,400,{error:"Укажите фактическое количество 0 или больше"});return true;}
       if(actualQty===systemQty){sendJson(res,400,{error:"Расхождения нет: количество совпадает с Provecta"});return true;}

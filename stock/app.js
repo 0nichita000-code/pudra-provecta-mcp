@@ -1,9 +1,9 @@
 (()=>{
 const API_BASE="https://pudra-provecta-mcp.onrender.com";
-const S={user:"",role:"staff",pin:"",depots:[],product:null,stream:null,scanTimer:null,watchTimer:null,lastTransferId:0,lastDiffId:0,zxingControls:null,scanLocked:false,lastScanned:"",cameraIds:[],cameraIndex:0,inventory:[],invShown:0,invGroupName:"",audioCtx:null};
+const S={user:"",role:"staff",pin:"",depots:[],product:null,stream:null,scanTimer:null,watchTimer:null,lastTransferId:0,lastDiffId:0,zxingControls:null,scanLocked:false,lastScanned:"",cameraIds:[],cameraIndex:0,inventory:[],invShown:0,invGroupName:"",audioCtx:null,depotId:""};
 const $=id=>document.getElementById(id);
 const esc=s=>String(s??"").replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[m]));
-function headers(){return {"content-type":"application/json","x-pudra-pin":S.pin,"x-pudra-user":encodeURIComponent(S.user),"x-pudra-role":S.role};}
+function headers(){return {"content-type":"application/json","x-pudra-pin":S.pin,"x-pudra-user":encodeURIComponent(S.user),"x-pudra-role":S.role,"x-pudra-depot":S.depotId};}
 async function api(url,opt={}){
   const timeoutMs=Number(opt.timeoutMs)||20000;
   const retries=Number.isInteger(opt.retries)?Math.max(0,opt.retries):1;
@@ -122,21 +122,25 @@ function tab(id){
 }
 function saveLogin(){
   try{
-    localStorage.setItem("pudraStockLogin",JSON.stringify({user:S.user,role:S.role,pin:S.role==="admin"?S.pin:""}));
+    localStorage.setItem("pudraStockLogin",JSON.stringify({user:S.user,role:S.role,pin:S.role==="admin"?S.pin:"",depotId:S.depotId}));
+    if(S.role==="staff")sessionStorage.setItem("pudraStoreSession",S.pin);
   }catch{}
 }
 function updatePinVisibility(){
   const admin=$("role").value==="admin";
   $("pinWrap").classList.toggle("hidden",!admin);
+  $("staffStoreWrap").classList.toggle("hidden",admin);
   if(!admin)$("pin").value="";
 }
 async function login(auto=false){
-  S.user=$("userName").value.trim();S.role=$("role").value;S.pin=S.role==="admin"?$("pin").value:"";
+  S.user=$("userName").value.trim();S.role=$("role").value;S.depotId=S.role==="staff"?$("loginStore").value:"";S.pin=S.role==="admin"?$("pin").value:$("staffStorePassword").value;
   if(!S.user)return msg($("loginMsg"),"Введите имя","bad");
   if(S.role==="admin"&&!S.pin)return msg($("loginMsg"),"Введите PIN администратора","bad");
+  if(S.role==="staff"&&(!S.depotId||!S.pin))return msg($("loginMsg"),"Выберите магазин и введите его пароль","bad");
   try{
     const m=await api("/stock/api/meta",{timeoutMs:30000,retries:2});
     S.depots=m.depots;
+    $("myDepot").value=S.depotId||$("myDepot").value;
     $("login").classList.add("hidden");
     $("app").classList.remove("hidden");
     $("who").textContent=S.user+(S.role==="admin"?" · админ":"");
@@ -157,8 +161,14 @@ async function restoreLogin(){
     $("role").value=saved.role||"staff";
     $("pin").value=saved.pin||"";
     updatePinVisibility();
-    await login(true);
+    await loadLoginStores();
+    $("loginStore").value=saved.depotId||"";
+    $("staffStorePassword").value=sessionStorage.getItem("pudraStoreSession")||"";
+    if(saved.role==="admin"||$("staffStorePassword").value)await login(true);
   }catch{}
+}
+async function loadLoginStores(){
+  try{const r=await fetch(API_BASE+"/stock/api/stores");if(!r.ok)return;const d=await r.json();$("loginStore").innerHTML='<option value="">Выберите магазин</option>'+(d.depots||[]).map(x=>'<option value="'+esc(x.id)+'">'+esc(x.name)+'</option>').join("");}catch{}
 }
 function stockRows(p){return p.stocks.map(x=>{const q=x.quantity==null?"обновляется…":x.quantity;return '<div class="stock"><span>'+esc(x.depotName)+'</span><span class="qty '+(x.quantity!=null&&Number(x.quantity)<=0?"zero":"")+'">'+esc(q)+'</span></div>';}).join("");}
 function optionList(selected=""){return '<option value="">Выберите точку</option>'+S.depots.map(d=>'<option value="'+esc(d.id)+'" '+(d.id===selected?"selected":"")+'>'+esc(d.name)+'</option>').join("");}
@@ -613,7 +623,7 @@ async function boot(){
     openApp();
   }
 
-  restoreLogin();
+  loadLoginStores().then(restoreLogin);
 }
 boot();
 })();

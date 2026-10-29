@@ -12,7 +12,7 @@ async function request(path,method="GET",data=null){
 function msg(s){$("countInfo").textContent=s}
 function tableCSV(text){
  const t=text.replace(/^\uFEFF/,"");const first=t.split(/\r?\n/)[0]||"";
- const sep=(first.match(/;/g)||[]).length >= (first.match(/,/g)||[]).length?";":",";
+ const sep=first.includes("\t")?"\t":((first.match(/;/g)||[]).length >= (first.match(/,/g)||[]).length?";":",");
  let rows=[],row=[],field="",quoted=false;
  for(let i=0;i<t.length;i++){const c=t[i];
   if(c==='"'){if(quoted&&t[i+1]==='"'){field+='"';i++}else quoted=!quoted}
@@ -66,15 +66,15 @@ function render(){
  try{await request("/stock/api/count-documents/"+current.id+"?depotId="+encodeURIComponent(depot()),"PATCH",{index:i,actual:Number(n)});current.items[i].actual=Number(n);render()}catch(e){alert(e.message)}});
 }
 async function upload(){
- const file=$("countFile").files[0];if(!file){alert("Выберите CSV-файл");return}
+ const file=$("countFile").files[0];const pasted=$("countPaste").value.trim();if(!file&&!pasted){alert("Выберите CSV-файл или вставьте таблицу");return}
  try{
- const arr=tableCSV(await file.text());const hdr=arr.shift().map(s=>s.trim().toLowerCase());
+ const arr=tableCSV(pasted||await file.text());const hdr=arr.shift().map(s=>s.trim().toLowerCase());
  const find=terms=>hdr.findIndex(s=>terms.some(t=>s.includes(t)));
  const n=find(["назван","name","denum"]),b=find(["штрих","barcode","cod de bare"]),q=find(["колич","quantity","cantitat"]);
  if(n<0||b<0||q<0)throw Error("Нужны столбцы НАЗВАНИЕ, ШТРИХКОД, КОЛИЧЕСТВО");
  const map=new Map();for(const row of arr){const code=String(row[b]||"").trim();if(!code)continue;const amount=Number(String(row[q]||"").trim().replace(",","."));if(!Number.isFinite(amount)||amount<0)throw Error("Некорректное количество: "+code);const prev=map.get(code);if(prev)prev.expected+=amount;else map.set(code,{name:row[n]||"",barcode:code,expected:amount})}
  const items=[...map.values()];if(!items.length)throw Error("Нет товаров с штрихкодами");
- const d=await request("/stock/api/count-documents","POST",{title:$("countDocName").value.trim()||file.name,depotId:$("countUploadDepot").value,type:$("countDocType").value,items});
+ const d=await request("/stock/api/count-documents","POST",{title:$("countDocName").value.trim()||(file?file.name:"Документ из таблицы"),depotId:$("countUploadDepot").value,type:$("countDocType").value,items});
  $("countUploadInfo").textContent="Готово: загружено "+items.length+" позиций. Документ №"+d.id;
  if($("countUploadDepot").value===depot())refresh();
  }catch(e){$("countUploadInfo").textContent="Не загружено: "+e.message}
@@ -96,6 +96,7 @@ $("countBack").onclick=()=>{stopCamera();refresh()};
 $("countFind").oninput=render;
 $("countScan").onclick=camera;
 $("countUpload").onclick=upload;
+$("countFile").addEventListener("change",()=>{$("countSelectedFile").textContent=$("countFile").files[0]?.name||"Файл не выбран"});
 $("countExport").onclick=()=>{if(!current)return;saveCSV(current.title+" - результат",[["НАЗВАНИЕ","ШТРИХКОД","КОЛИЧЕСТВО","ПО ДОКУМЕНТУ","РАЗНИЦА","СТАТУС"],...current.items.map(x=>[x.name,x.barcode,x.actual===null?"":x.actual,x.expected,x.actual===null?"":x.actual-x.expected,x.actual===null?"НЕ ПРОВЕРЕНО":"ПРОВЕРЕНО"])])};
 document.querySelector('[data-tab="countTab"]').addEventListener("click",initialize);
 $("loginBtn").addEventListener("click",()=>setTimeout(initialize,1800));

@@ -70,7 +70,7 @@ async function upload(){
  try{
  let arr;
  if(pasted){arr=tableCSV(pasted);}
- else if(/\\.xlsx?$/i.test(file.name)){
+ else if(/\.(xlsx|xls)$/i.test(file.name)){
    if(!window.XLSX)throw Error("Модуль Excel не загрузился. Откройте приложение в Safari и повторите.");
    const wb=window.XLSX.read(await file.arrayBuffer(),{type:"array",raw:true});
    const sheet=wb.Sheets[wb.SheetNames[0]];

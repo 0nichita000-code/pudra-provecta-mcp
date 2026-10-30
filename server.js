@@ -797,66 +797,51 @@ async function getArticles(force = false) {
 async function refreshStockCache(force = false) {
   if (stockCache.refreshing) return;
   if (!force && stockCache.ready && Date.now() - stockCache.at < 2 * 60 * 1000) return;
-
   stockCache.refreshing = true;
   try {
-    const allowed = new Set([
-      "PUDRA ORHEI",
-      "PUDRA GLODENI",
-      "PUDRA BALTI",
-      "PUDRA BALTI PINK",
-      "DEPOZIT RISCANI"
-    ]);
-    const depots = (await getDepots(false))
-      .map(simpleDepot)
-      .filter(d => d.id && allowed.has(String(d.name || "").toUpperCase().trim()));
-
-    // При первом запуске начинаем пустой прогрессивный кэш.
-    // При обычном обновлении сохраняем старые цифры до прихода новых.
-    if (!stockCache.ready) {
-      stockCache.byArticle = new Map();
-      stockCache.readyDepots = new Set();
-    }
-
-    const tasks = depots.map(async depot => {
-      const rows = asArray(await apiGet("/v1/resume/currentBalance", { depotId: [depot.id] }));
-
-      // Удаляем старые значения только этой точки.
-      for (const [aid, xs] of stockCache.byArticle) {
-        const kept = xs.filter(x => x.id !== depot.id);
-        if (kept.length) stockCache.byArticle.set(aid, kept);
-        else stockCache.byArticle.delete(aid);
+    const allowed = new Set(["PUDRA ORHEI","PUDRA GLODENI","PUDRA BALTI","PUDRA BALTI PINK","DEPOZIT RISCANI"]);
+    const depots = (await getDepots(false)).map(simpleDepot).filter(d => d.id && allowed.has(String(d.name||"").toUpperCase().trim()));
+    if (!depots.length) throw Error("No PUDRA depots returned by Provecta");
+    const results = await Promise.allSettled(depots.map(async d => {
+      const raw=await apiGet("/v1/resume/currentBalance",{depotId:[d.id]});
+      if (raw == null) throw Error("Empty stock response for "+d.name);
+      const rows=asArray(raw);
+      if (!Array.isArray(rows) || rows.length === 0) throw Error("No stock records for "+d.name);
+      const parsed=[];
+      for(const row of rows){
+        const id=idOf(row.Article??row.article??row.ArticleId??row.articleId);
+        const q=Number(row.BalanceQuantitySum??row.balanceQuantitySum);
+        if(id && Number.isFinite(q))parsed.push({id,quantity:q});
       }
-
-      for (const row of rows) {
-        const aid = idOf(row.Article ?? row.article ?? row.ArticleId ?? row.articleId);
-        if (!aid) continue;
-        const qty = Number(row.BalanceQuantitySum ?? row.balanceQuantitySum ?? 0) || 0;
-        if (!stockCache.byArticle.has(aid)) stockCache.byArticle.set(aid, []);
-        stockCache.byArticle.get(aid).push({ id: depot.id, name: depot.name, quantity: qty });
+      if (!parsed.length) throw Error("No valid stock records for "+d.name);
+      return {depot:d,parsed};
+    }));
+    const errors=[];
+    for(let i=0;i<results.length;i++){
+      const x=results[i],d=depots[i];
+      if(x.status!=="fulfilled"){errors.push(d.name+": "+String(x.reason?.message||x.reason));continue;}
+      for(const [id,xs] of stockCache.byArticle){
+        const kept=xs.filter(z=>z.id!==d.id);
+        if(kept.length)stockCache.byArticle.set(id,kept);
+        else stockCache.byArticle.delete(id);
       }
-
-      stockCache.readyDepots.add(depot.id);
-      stockCache.at = Date.now();
-      stockCache.ready = stockCache.readyDepots.size > 0;
-      console.log(`Stock depot ready: ${depot.name} (${stockCache.readyDepots.size}/${depots.length})`);
-    });
-
-    const settled = await Promise.allSettled(tasks);
-    const failed = settled.filter(x => x.status === "rejected");
-    stockCache.refreshing = false;
-    stockCache.ready = stockCache.readyDepots.size > 0;
-    stockCache.at = Date.now();
-
-    if (failed.length) {
-      console.error(`Stock cache partial: ${stockCache.readyDepots.size}/${depots.length} depots ready; ${failed.length} failed`);
-    } else {
-      console.log(`Stock cache ready: ${stockCache.byArticle.size} articles across ${depots.length} PUDRA depots`);
+      for(const row of x.value.parsed){
+        if(!stockCache.byArticle.has(row.id))stockCache.byArticle.set(row.id,[]);
+        stockCache.byArticle.get(row.id).push({id:d.id,name:d.name,quantity:row.quantity});
+      }
+      stockCache.readyDepots.add(d.id);
+      console.log("Stock depot ready:",d.name,"records",x.value.parsed.length);
     }
-  } catch (e) {
-    stockCache.refreshing = false;
-    console.error("Stock cache refresh failed", e?.message || e);
-  }
+    stockCache.ready = depots.every(d=>stockCache.readyDepots.has(d.id));
+    stockCache.lastErrors=errors;
+    if (!errors.length){stockCache.at=Date.now();stockCache.lastSuccessAt=stockCache.at;}
+    if(errors.length)console.error("Stock cache incomplete:",errors.join("; "));
+    else console.log("Stock cache verified:",stockCache.byArticle.size,"products in",depots.length,"depots");
+  } catch(e){
+    stockCache.ready=false;
+    stockCache.lastErrors=[String(e?.message||e)];
+    console.error("Stock cache refresh failed",e?.message||e);
+  } finally {stockCache.refreshing=false;}
 }
 
 function getCachedStocks(articleId) {
@@ -872,7 +857,7 @@ function getCachedStocks(articleId) {
 }
 
 function getStockCacheState() {
-  return { ready: stockCache.ready, refreshing: stockCache.refreshing, at: stockCache.at, readyDepots: stockCache.readyDepots?.size || 0 };
+  return { ready: stockCache.ready, refreshing: stockCache.refreshing, at: stockCache.at, lastSuccessAt:stockCache.lastSuccessAt||0, errors:stockCache.lastErrors||[], readyDepots: stockCache.readyDepots?.size || 0 };
 }
 
 function normalizeDateTime(s, end = false) {

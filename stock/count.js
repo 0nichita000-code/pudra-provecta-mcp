@@ -102,15 +102,40 @@ async function camera(){
  if(!current)return;
  if(stream||zxingControls){stopCamera();return}
  try{
- await ensureScannerLibrary();
- const wrap=document.createElement("div");wrap.id="countCameraBox";wrap.style="margin:10px 0";wrap.innerHTML='<video id="countVideo" playsinline autoplay muted style="width:100%;height:180px;background:#111"></video><button id="countStop" class="ghost">Остановить камеру</button>';
- $("countFind").after(wrap);$("countStop").onclick=stopCamera;
- stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:"environment"}},audio:false});
- $("countVideo").srcObject=stream;await $("countVideo").play().catch(()=>{});
- const gotCode=code=>{if(!code||!current||busy)return;busy=true;const scanned=String(code).trim();$("countFind").value=scanned;render();stopCamera();if(!current.items.some(x=>x.barcode===scanned))alert("Товара нет в документе: "+scanned);setTimeout(()=>busy=false,350)};
- zxingReader=new window.ZXingBrowser.BrowserMultiFormatReader();
- zxingControls=await zxingReader.decodeFromStream(stream,$("countVideo"),result=>{if(result)gotCode(result.getText?result.getText():result.text)});
- }catch(e){stopCamera();alert("Ошибка камеры: "+e.message)}
+  if(!navigator.mediaDevices?.getUserMedia)throw Error("Этот браузер не разрешает доступ к камере");
+  const wrap=document.createElement("div");wrap.id="countCameraBox";wrap.style="margin:10px 0";
+  wrap.innerHTML='<video id="countVideo" playsinline autoplay muted style="width:100%;height:180px;background:#111"></video><button id="countStop" class="ghost">Остановить камеру</button>';
+  $("countFind").after(wrap);$("countStop").onclick=stopCamera;
+  stream=await navigator.mediaDevices.getUserMedia({audio:false,video:{facingMode:{ideal:"environment"},width:{ideal:1280},height:{ideal:720},frameRate:{ideal:30}}});
+  const video=$("countVideo");video.srcObject=stream;await video.play();
+  const gotCode=code=>{
+   if(!code||!current||busy)return;
+   busy=true;const scanned=String(code).trim();$("countFind").value=scanned;render();stopCamera();
+   if(!current.items.some(x=>x.barcode===scanned))alert("Товара нет в документе: "+scanned);
+   setTimeout(()=>busy=false,350);
+  };
+  let started=false,scannerErrors=[];
+  if(!window.ZXingBrowser?.BrowserMultiFormatReader){try{await ensureScannerLibrary()}catch(e){scannerErrors.push(e.message)}}
+  if(window.ZXingBrowser?.BrowserMultiFormatReader){
+   try{zxingReader=new window.ZXingBrowser.BrowserMultiFormatReader();
+    zxingControls=await zxingReader.decodeFromStream(stream,video,result=>{if(result)gotCode(result.getText?result.getText():result.text)});
+    started=true;
+   }catch(e){scannerErrors.push("ZXing: "+e.message)}
+  }
+  if("BarcodeDetector" in window){
+   try{const formats=await BarcodeDetector.getSupportedFormats?.().catch?.(()=>[])||[];
+    const wanted=["ean_13","ean_8","code_128","upc_a","upc_e","code_39","itf"];
+    const usable=formats.length?wanted.filter(x=>formats.includes(x)):wanted;
+    const detector=new BarcodeDetector(usable.length?{formats:usable}:{});
+    scanLoop=setInterval(async()=>{if(!stream||busy)return;try{const found=await detector.detect(video);if(found?.[0]?.rawValue)gotCode(found[0].rawValue)}catch{}},250);
+    started=true;
+   }catch(e){scannerErrors.push("BarcodeDetector: "+e.message)}
+  }
+  if(!started)throw Error(scannerErrors.join("; ")||"Модуль сканера недоступен");
+ }catch(e){
+  const reason=String(e?.message||e);stopCamera();
+  alert("Не удалось включить сканер приёмки: "+reason+(reason.includes("NotReadableError")||reason.includes("Could not start")?" Закройте сканер поиска товаров и попробуйте снова.":""));
+ }
 }
 function stopCamera(){if(scanLoop)clearInterval(scanLoop);scanLoop=null;try{zxingControls?.stop()}catch{}zxingControls=null;try{zxingReader?.reset?.()}catch{}zxingReader=null;if(stream)stream.getTracks().forEach(t=>t.stop());stream=null;$("countCameraBox")?.remove()}
 $("myDepot").onchange=()=>{localStorage.setItem("pudraMyDepot",depot());stopCamera();refresh()};

@@ -434,6 +434,12 @@ async function refreshScanStocks(v){
   if($("scanRetryStock"))$("scanRetryStock").addEventListener("click",()=>refreshScanStocks(v));
 }
 async function handleScannedCode(v){
+  if(S.externalScanHandler){
+    if(S.scanLocked)return;
+    S.scanLocked=true;
+    try{S.externalScanHandler(v)}finally{setTimeout(()=>{S.scanLocked=false},500)}
+    return;
+  }
   if(S.scanLocked)return;
   S.scanLocked=true;
   S.lastScanned=v;
@@ -590,6 +596,11 @@ $("startScan").addEventListener("click",startScan);$("stopScan").addEventListene
 document.querySelectorAll(".tab").forEach(b=>b.addEventListener("click",()=>tab(b.dataset.tab)));
 updatePinVisibility();
 
+window.PUDRA_SHARED_SCANNER={
+ start:startScan,
+ stop:stopScan,
+ setHandler(fn){S.externalScanHandler=typeof fn==="function"?fn:null;S.scanLocked=false}
+};
 async function boot(){
   const splash=$("bootSplash");
   const label=$("bootLabel");

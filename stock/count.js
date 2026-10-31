@@ -98,46 +98,38 @@ async function ensureScannerLibrary(){
  }
  throw Error("Библиотека сканирования не загрузилась. Проверьте интернет и повторите.");
 }
+let sharedCameraActive=false;
 async function camera(){
+ const scanner=window.PUDRA_SHARED_SCANNER;
  if(!current)return;
- if(stream||zxingControls){stopCamera();return}
+ if(!scanner){alert("Основной сканер ещё не загрузился. Откройте приложение заново.");return}
+ if(sharedCameraActive){await stopCamera();return}
  try{
-  if(!navigator.mediaDevices?.getUserMedia)throw Error("Этот браузер не разрешает доступ к камере");
-  const wrap=document.createElement("div");wrap.id="countCameraBox";wrap.style="margin:10px 0";
-  wrap.innerHTML='<video id="countVideo" playsinline autoplay muted style="width:100%;height:180px;background:#111"></video><button id="countStop" class="ghost">Остановить камеру</button>';
-  $("countFind").after(wrap);$("countStop").onclick=stopCamera;
-  stream=await navigator.mediaDevices.getUserMedia({audio:false,video:{facingMode:{ideal:"environment"},width:{ideal:1280},height:{ideal:720},frameRate:{ideal:30}}});
-  const video=$("countVideo");video.srcObject=stream;await video.play();
-  const gotCode=code=>{
-   if(!code||!current||busy)return;
-   busy=true;const scanned=String(code).trim();$("countFind").value=scanned;render();stopCamera();
+  await scanner.stop();
+  const wrap=$("scanVideoWrap"), editor=$("countEditor");
+  if(!wrap||!editor)throw Error("Окно основного сканера не найдено");
+  $("countScan").after(wrap);
+  scanner.setHandler(code=>{
+   const scanned=String(code||"").trim();
+   if(!scanned||!current)return;
+   $("countFind").value=scanned;
+   render();
    if(!current.items.some(x=>x.barcode===scanned))alert("Товара нет в документе: "+scanned);
-   setTimeout(()=>busy=false,350);
-  };
-  let started=false,scannerErrors=[];
-  if(!window.ZXingBrowser?.BrowserMultiFormatReader){try{await ensureScannerLibrary()}catch(e){scannerErrors.push(e.message)}}
-  if(window.ZXingBrowser?.BrowserMultiFormatReader){
-   try{zxingReader=new window.ZXingBrowser.BrowserMultiFormatReader();
-    zxingControls=await zxingReader.decodeFromStream(stream,video,result=>{if(result)gotCode(result.getText?result.getText():result.text)});
-    started=true;
-   }catch(e){scannerErrors.push("ZXing: "+e.message)}
-  }
-  if("BarcodeDetector" in window){
-   try{const formats=await BarcodeDetector.getSupportedFormats?.().catch?.(()=>[])||[];
-    const wanted=["ean_13","ean_8","code_128","upc_a","upc_e","code_39","itf"];
-    const usable=formats.length?wanted.filter(x=>formats.includes(x)):wanted;
-    const detector=new BarcodeDetector(usable.length?{formats:usable}:{});
-    scanLoop=setInterval(async()=>{if(!stream||busy)return;try{const found=await detector.detect(video);if(found?.[0]?.rawValue)gotCode(found[0].rawValue)}catch{}},250);
-    started=true;
-   }catch(e){scannerErrors.push("BarcodeDetector: "+e.message)}
-  }
-  if(!started)throw Error(scannerErrors.join("; ")||"Модуль сканера недоступен");
- }catch(e){
-  const reason=String(e?.message||e);stopCamera();
-  alert("Не удалось включить сканер приёмки: "+reason+(reason.includes("NotReadableError")||reason.includes("Could not start")?" Закройте сканер поиска товаров и попробуйте снова.":""));
- }
+  });
+  sharedCameraActive=true;
+  $("countScan").textContent="Остановить сканирование";
+  await scanner.start();
+  if(wrap.classList.contains("hidden"))throw Error("Камера не запустилась");
+ }catch(e){await stopCamera();alert("Ошибка сканера приёмки: "+String(e?.message||e))}
 }
-function stopCamera(){if(scanLoop)clearInterval(scanLoop);scanLoop=null;try{zxingControls?.stop()}catch{}zxingControls=null;try{zxingReader?.reset?.()}catch{}zxingReader=null;if(stream)stream.getTracks().forEach(t=>t.stop());stream=null;$("countCameraBox")?.remove()}
+async function stopCamera(){
+ const scanner=window.PUDRA_SHARED_SCANNER;
+ if(scanner){scanner.setHandler(null);await scanner.stop()}
+ const wrap=$("scanVideoWrap"),target=$("scanResult");
+ if(wrap&&target)target.after(wrap);
+ sharedCameraActive=false;
+ $("countScan").textContent="Сканировать штрихкод";
+}
 $("myDepot").onchange=()=>{localStorage.setItem("pudraMyDepot",depot());stopCamera();refresh()};
 $("countBack").onclick=()=>{stopCamera();refresh()};
 $("countFind").oninput=render;

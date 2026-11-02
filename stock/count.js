@@ -98,7 +98,7 @@ async function ensureScannerLibrary(){
  }
  throw Error("Библиотека сканирования не загрузилась. Проверьте интернет и повторите.");
 }
-let sharedCameraActive=false;
+let sharedCameraActive=false, lastCountScan="", lastCountScanAt=0;
 async function camera(){
  const scanner=window.PUDRA_SHARED_SCANNER;
  if(!current)return;
@@ -109,12 +109,19 @@ async function camera(){
   const wrap=$("scanVideoWrap"), editor=$("countEditor");
   if(!wrap||!editor)throw Error("Окно основного сканера не найдено");
   $("countScan").after(wrap);
+  const status=document.createElement("div");status.id="countScanStatus";status.style="padding:10px;border-radius:10px;margin:8px 0;background:#f2f2f5;font-weight:600";status.textContent="Наведите камеру на штрихкод";wrap.after(status);
+  const controls=document.createElement("div");controls.id="countZoomControls";controls.style="display:flex;gap:8px;margin:8px 0;flex-wrap:wrap";controls.innerHTML='<button type="button" class="ghost" data-zoom="1">1×</button><button type="button" class="ghost" data-zoom="2">2× мелкий штрихкод</button><button type="button" class="ghost" data-zoom="3">3×</button>';status.after(controls);
+  controls.querySelectorAll("[data-zoom]").forEach(btn=>btn.onclick=()=>scanner.zoom(Number(btn.dataset.zoom)));
   scanner.setHandler(code=>{
    const scanned=String(code||"").trim();
    if(!scanned||!current)return;
-   $("countFind").value=scanned;
+   const now=Date.now();if(scanned===lastCountScan&&now-lastCountScanAt<1400)return;
+   lastCountScan=scanned;lastCountScanAt=now;
+   const found=current.items.some(x=>x.barcode===scanned);
+   const status=$("countScanStatus");
+   if(status){status.textContent=found?"Найден товар: "+scanned:"Товара нет в документе: "+scanned+". Продолжайте сканирование.";status.style.background=found?"#dbf8e6":"#ffebe8";}
+   $("countFind").value=found?scanned:"";
    render();
-   if(!current.items.some(x=>x.barcode===scanned))alert("Товара нет в документе: "+scanned);
   });
   sharedCameraActive=true;
   $("countScan").textContent="Остановить сканирование";
@@ -127,6 +134,7 @@ async function stopCamera(){
  if(scanner){scanner.setHandler(null);await scanner.stop()}
  const wrap=$("scanVideoWrap"),target=$("scanResult");
  if(wrap&&target)target.after(wrap);
+ $("countZoomControls")?.remove();$("countScanStatus")?.remove();
  sharedCameraActive=false;
  $("countScan").textContent="Сканировать штрихкод";
 }

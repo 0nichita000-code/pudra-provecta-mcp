@@ -39,6 +39,13 @@ async function initialize(){
  else if(m.depots.some(d=>d.id===previous))$("myDepot").value=previous;
  localStorage.setItem("pudraMyDepot",depot());
  $("countAdmin").classList.toggle("hidden",p.role!=="admin");
+ if(p.role==="admin"){
+  try{
+   const state=await request("/stock/api/count-storage-status");
+   $("countStorageNotice").textContent=state.persistent?"Документы сохраняются в PostgreSQL.":"ВНИМАНИЕ: документы пока сохраняются во временном файле и могут исчезнуть при перезапуске сервера. Скачивайте резервную копию.";
+   $("countStorageNotice").style.background=state.persistent?"#dcfce7":"#fff0d5";
+  }catch(e){$("countStorageNotice").textContent="Не удалось проверить сохранность документов: "+e.message}
+ }
  await refresh();
  }catch(e){msg("Не удалось подключиться: "+e.message)}
 }
@@ -143,6 +150,16 @@ $("myDepot").onchange=()=>{localStorage.setItem("pudraMyDepot",depot());stopCame
 $("countBack").onclick=()=>{stopCamera();refresh()};
 $("countFind").oninput=render;
 $("countScan").onclick=camera;
+$("countBackupAll").onclick=async()=>{
+ try{
+  const data=await request("/stock/api/count-documents-backup");
+  const file=new Blob([JSON.stringify(data,null,2)],{type:"application/json"});
+  const url=URL.createObjectURL(file),link=document.createElement("a");
+  link.href=url;link.download="PUDRA_BACKUP_"+new Date().toISOString().slice(0,10)+".json";
+  document.body.appendChild(link);link.click();link.remove();
+  setTimeout(()=>URL.revokeObjectURL(url),30000);
+ }catch(e){alert("Ошибка резервной копии: "+e.message)}
+};
 $("countUpload").onclick=upload;
 $("countFile").addEventListener("change",()=>{$("countSelectedFile").textContent=$("countFile").files[0]?.name||"Файл не выбран"});
 $("countExport").onclick=()=>{if(!current)return;saveCSV(current.title+" - результат",[["НАЗВАНИЕ","ШТРИХКОД","КОЛИЧЕСТВО","ПО ДОКУМЕНТУ","РАЗНИЦА","СТАТУС"],...current.items.map(x=>[x.name,x.barcode,x.actual===null?"":x.actual,x.expected,x.actual===null?"":x.actual-x.expected,x.actual===null?"НЕ ПРОВЕРЕНО":"ПРОВЕРЕНО"])])};

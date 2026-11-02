@@ -235,18 +235,28 @@ async function openImages(page,item) {
     }))).catch(()=>[]);
     console.log("[PHOTO GALLERY DOM]",JSON.stringify({barcode:item.barcode,widgets}).slice(0,6500));
   }
-  const images=await page.locator(".swiper-container.well img[src],.swiper-container .swiper-slide img[src]").count();
-  const galleryText=(await page.locator(".swiper-container,.swiper-pagination,.swiper-slide").allTextContents().catch(()=>[])).join(" | ");
-  const counters=[...(text+" | "+galleryText).matchAll(/\b(\d{1,4})\s*\/\s*(\d{1,4})\b/g)].map(m=>({position:Number(m[1]),total:Number(m[2])}));
-  if(images>0||counters.some(x=>x.total>0&&x.position>0))return "exists";
-  if(!/\b0\s*\/\s*0\b/.test(text)&&!/\b0\s+of\s+0\b/i.test(text)){
-    const swiperTexts=(await page.locator(".swiper-container,.swiper-pagination,.swiper-slide").allTextContents().catch(()=>[]))
-      .map(x=>x.trim().slice(0,60)).filter(Boolean).slice(0,4);
-    const currentNameVisible=text.toLowerCase().includes(String(item.name).toLowerCase().slice(0,10));
-    const barcodeVisible=text.includes(item.barcode);
-    const imgtotal=await page.locator("img").count();
-    throw new Error("Gallery ambiguous; galleryImgs="+images+" totalImgs="+imgtotal+" productNameVisible="+currentNameVisible+" barcodeVisible="+barcodeVisible+" swiperText="+JSON.stringify(swiperTexts));
+  // Swiper's pagination displays "1 / 1" even for an empty wrapper.
+  // Never use this counter to decide whether the product has photos.
+  const wrapper=page.locator(".swiper-container.well .swiper-wrapper").first();
+  await wrapper.waitFor({state:"attached",timeout:12000});
+  const realSlides=await wrapper.locator(".swiper-slide").count();
+  const inputValues=await page.locator("input:not([type=password])").evaluateAll(nodes=>
+    nodes.map(n=>String(n.value||"").trim()).filter(Boolean));
+  const productMatched=inputValues.some(x=>x===item.barcode || x===item.name || (item.code && x===item.code));
+  if(process.env.PHOTO_DEBUG_GALLERY==="true"){
+    console.log("[PHOTO PRODUCT MATCH]",JSON.stringify({
+      barcode:item.barcode,code:item.code,name:item.name.slice(0,90),
+      productMatched,slides:realSlides,
+      inputValues:inputValues.filter(x=>x===item.barcode||x===item.code||x===item.name).slice(0,4)
+    }));
   }
+  // A direct productid URL must show the actual matching product before writing.
+  if(!productMatched)throw new Error("Product form identity not confirmed from barcode/name/code");
+  if(realSlides>0)return "exists";
+  await page.waitForTimeout(1500);
+  if(await wrapper.locator(".swiper-slide").count())return "exists";
+  const uploadButton=page.getByRole("button",{name:/^(upload|загрузить|încărca|incarca)$/i}).first();
+  if(!(await uploadButton.isVisible().catch(()=>false)))throw new Error("Gallery empty but upload control unavailable");
   return "empty";
 }
 async function upload(page,url) {

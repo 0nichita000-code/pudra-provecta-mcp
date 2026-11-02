@@ -23,7 +23,7 @@ jobs:
       PROVECTA_USERNAME: ${{ secrets.PROVECTA_USERNAME }}
       PROVECTA_PASSWORD: ${{ secrets.PROVECTA_PASSWORD }}
       PROVECTA_CLIENT_ID: ${{ secrets.PROVECTA_CLIENT_ID }}
-      PHOTO_LIVE: 'true'
+      PHOTO_LIVE: 'false'
       PHOTO_BATCH_SIZE: '1'
     steps:
       - name: Checkout repository

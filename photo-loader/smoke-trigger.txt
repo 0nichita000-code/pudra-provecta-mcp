@@ -1,1 +1,1 @@
-PUDRA PHOTO LOADER DRY RUN #8 - multilingual Images lookup on known product, no write.
+PUDRA PHOTO LOADER DRY RUN #9 - force tab diagnostics for known item, no write.

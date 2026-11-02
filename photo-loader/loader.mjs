@@ -156,7 +156,8 @@ async function getCatalog() {
         failures.push(variant+": missing token");
       } catch(error) {
         const message=String(error?.message||error);
-        const status=message.match(/HTTP\s+(\d+)/)?.[1] || String(error?.cause?.code||error?.code||error?.cause?.name||error?.name||"network").replace(/[^A-Za-z0-9_-]/g,"").slice(0,60);
+        const code=error?.cause?.code||error?.cause?.name||error?.cause?.message||error?.code||error?.message||error?.name||"network";
+        const status=message.match(/HTTP\s+(\d+)/)?.[1] || String(code).replaceAll(PASS,"[redacted]").replaceAll(USER,"[redacted]").replace(/[?&](?:password|username)=[^&\\s]+/gi,"[redacted]").slice(0,120);
         failures.push(variant+": "+status);
       }
     }

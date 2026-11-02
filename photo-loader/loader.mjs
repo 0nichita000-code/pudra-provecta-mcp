@@ -228,6 +228,13 @@ async function openImages(page,item) {
   await tab.click();
   await page.waitForTimeout(2500);
   const text=(await page.locator("body").innerText()).slice(-8000);
+  if(process.env.PHOTO_DEBUG_GALLERY==="true"){
+    const widgets=await page.locator('[class*="swiper"],[class*="gallery"],[class*="carousel"]').evaluateAll(els=>els.slice(0,12).map(el=>({
+      tag:el.tagName,class:String(el.className).slice(0,110),text:el.innerText?.slice(0,90),
+      inner:el.innerHTML.slice(0,650)
+    }))).catch(()=>[]);
+    console.log("[PHOTO GALLERY DOM]",JSON.stringify({barcode:item.barcode,widgets}).slice(0,6500));
+  }
   const images=await page.locator(".swiper-container.well img[src],.swiper-container .swiper-slide img[src]").count();
   const galleryText=(await page.locator(".swiper-container,.swiper-pagination,.swiper-slide").allTextContents().catch(()=>[])).join(" | ");
   const counters=[...(text+" | "+galleryText).matchAll(/\b(\d{1,4})\s*\/\s*(\d{1,4})\b/g)].map(m=>({position:Number(m[1]),total:Number(m[2])}));

@@ -1,1 +1,1 @@
-PUDRA PHOTO LOADER DRY RUN #11 - safe gallery diagnostics on known item.
+PUDRA PHOTO LOADER LIVE PILOT #1 - conservative barcode-matched photo upload, up to one image.

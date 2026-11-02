@@ -1,1 +1,1 @@
-PUDRA PHOTO LOADER DRY RUN #5 - API Fetch.ok fix. No product changes.
+PUDRA PHOTO LOADER DRY RUN #6 - await Images tab before judging. No product changes.

@@ -207,11 +207,16 @@ async function loginUI(page){
 }
 async function openImages(page,item) {
   await page.goto(BASE+"/app/#/product/0?productid="+encodeURIComponent(item.id),{waitUntil:"domcontentloaded",timeout:45000});
-  await page.waitForTimeout(1300);
+  // Provecta is a large AngularJS app; the product tabs may take many seconds to mount.
+  await page.getByText("Images",{exact:true}).first().waitFor({state:"visible",timeout:30000}).catch(()=>{});
   if(await page.locator('input[type="password"]').first().isVisible().catch(()=>false))throw new Error("Browser session expired");
   let tab=page.getByRole("tab",{name:/images/i}).first();
-  if(!(await tab.count()))tab=page.getByText("Images",{exact:true}).first();
-  if(!(await tab.count()))throw new Error("Images tab not found");
+  if(!(await tab.isVisible().catch(()=>false)))tab=page.getByText("Images",{exact:true}).first();
+  if(!(await tab.isVisible().catch(()=>false))){
+    const hash=new URL(page.url()).hash.split("?")[0].slice(0,70);
+    const products=await page.getByText("Products",{exact:true}).count();
+    throw new Error("Images tab not available after 30s; route="+hash+" productsNav="+products);
+  }
   await tab.click();
   await page.waitForTimeout(600);
   const text=(await page.locator("body").innerText()).slice(-8000);
@@ -302,6 +307,7 @@ export async function run(){
       state.entries[item.id]=e;
       await saveState(state);
       console.log("[PHOTO LOADER]",JSON.stringify({barcode:item.barcode,status:e.status,source:e.candidate?.pageUrl||null}));
+      if(log.errors.length>=2){console.log("[PHOTO LOADER] Pausing batch after two errors");break;}
     }
     await context.close();
   }finally{

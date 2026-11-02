@@ -1,1 +1,1 @@
-2026-11-02: inspect HTML markup of one known SADOER photo gallery safely, no changes.
+2026-11-02: check actual Swiper slide count and matching product identity (SADOER). Dry-run.

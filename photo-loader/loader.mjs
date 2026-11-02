@@ -255,8 +255,13 @@ async function openImages(page,item) {
   if(realSlides>0)return "exists";
   await page.waitForTimeout(1500);
   if(await wrapper.locator(".swiper-slide").count())return "exists";
-  const uploadButton=page.getByRole("button",{name:/^(upload|загрузить|încărca|incarca)$/i}).first();
-  if(!(await uploadButton.isVisible().catch(()=>false)))throw new Error("Gallery empty but upload control unavailable");
+  const possible=await page.locator("button,a,.btn").evaluateAll(els=>els.map(el=>({
+    tag:el.tagName,text:(el.textContent||"").trim().replace(/\\s+/g," ").slice(0,75),
+    class:String(el.className).slice(0,100)
+  })).filter(x=>/upload|image|загруз|încărc/i.test(x.text)).slice(0,12)).catch(()=>[]);
+  if(process.env.PHOTO_DEBUG_GALLERY==="true")console.log("[PHOTO UPLOAD CONTROLS]",JSON.stringify(possible));
+  const uploadButton=page.locator("button,a,.btn").filter({hasText:/^(upload|загрузить|încărca|incarca)$/i}).first();
+  if(!(await uploadButton.isVisible().catch(()=>false)))throw new Error("Gallery empty but upload control unavailable; candidateCount="+possible.length);
   return "empty";
 }
 async function upload(page,url) {

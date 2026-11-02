@@ -26,6 +26,9 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Validate barcode-matching safeguards
+        run: node --test photo-loader/loader.test.mjs
+
       - name: Explain missing configuration
         if: ${{ env.PROVECTA_USERNAME == '' || env.PROVECTA_PASSWORD == '' }}
         run: |

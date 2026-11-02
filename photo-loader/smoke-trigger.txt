@@ -1,1 +1,1 @@
-2026-11-02: inspect upload controls for confirmed empty SADOER 6942349749902. Dry-run.
+2026-11-02: candidate search for SADOER acne patch EAN 6942349781780. No writes.

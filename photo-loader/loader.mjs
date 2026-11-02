@@ -285,8 +285,9 @@ export async function run(){
     return;
   }
   const allItems=await getCatalog();
-  const onlyBarcode=String(process.env.PHOTO_TEST_BARCODE||"").trim();
-  const items=onlyBarcode?allItems.filter(x=>x.barcode===onlyBarcode):allItems;
+  const onlyBarcodes=String(process.env.PHOTO_TEST_BARCODES||process.env.PHOTO_TEST_BARCODE||"").split(",").map(x=>x.trim()).filter(Boolean);
+  const allowed=new Set(onlyBarcodes);
+  const items=allowed.size?allItems.filter(x=>allowed.has(x.barcode)):allItems;
   if(!items.length)throw new Error("No matching Provecta products loaded");
   let browser;
   try{

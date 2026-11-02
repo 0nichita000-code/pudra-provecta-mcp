@@ -261,8 +261,10 @@ async function saveState(state) {
   await fs.writeFile(STATE_FILE,JSON.stringify(state,null,2)+"\n");
 }
 function checkedRecently(entry) {
+  if(process.env.PHOTO_FORCE_RECHECK==="true")return false;
   if(!entry)return false;
   if(entry.status==="exists"||entry.status==="saved")return true;
+  if(entry.status==="error")return Date.now()-Date.parse(entry.at||"1970-01-01")<24*60*60*1000;
   return Date.now()-Date.parse(entry.at||"1970-01-01")<RETRY_AFTER_MS;
 }
 export async function run(){

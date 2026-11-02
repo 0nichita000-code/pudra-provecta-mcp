@@ -14,7 +14,7 @@ const MAX_LOOKUPS = LIMIT * 20;
 const RETRY_AFTER_MS = 30 * 86400000;
 const MAX_IMAGE_BYTES = 6_000_000;
 const STOP = new Set(["and","the","face","for","with","item","no","new","color","set","ml","ton","women","men","asortiment","mix","pcs","buc","sau","long","lasting","makeup","lip","eye","50","100","20","40","60"]);
-const BAD_HOSTS = /(^|\.)((google|bing|yandex|facebook|instagram|pinterest|aliexpress|alibaba|tiktok|youtube)\.)/i;
+const BAD_HOSTS = /(^|\.)((google|bing|yandex|duckduckgo|facebook|instagram|pinterest|aliexpress|alibaba|tiktok|youtube)\.)/i;
 
 export function nameTokens(name) {
   return [...new Set(String(name || "").toUpperCase().match(/[A-Z0-9]{3,}/g) || [])]
@@ -61,35 +61,34 @@ function sanitizeLinks(urls) {
       if(!result.includes(url.toString()))result.push(url.toString());
     } catch {}
   }
-  return result.slice(0,12);
+  return result.slice(0,24);
 }
 async function searchUrls(context, barcode, name) {
-  const p=await context.newPage();
+  const page=await context.newPage();
   const found=[];
+  const query='"'+barcode+'" '+nameTokens(name).slice(0,2).join(" ");
   const queries=[
-    "https://www.google.com/search?num=8&q="+encodeURIComponent('"'+barcode+'" '+nameTokens(name).slice(0,3).join(" ")),
-    "https://www.bing.com/search?q="+encodeURIComponent('"'+barcode+'" '+nameTokens(name).slice(0,3).join(" "))
+    "https://www.google.com/search?num=10&q="+encodeURIComponent(query),
+    "https://www.bing.com/search?q="+encodeURIComponent(query),
+    "https://html.duckduckgo.com/html/?q="+encodeURIComponent(barcode+" "+nameTokens(name).slice(0,2).join(" "))
   ];
   try {
-    for(const url of queries){
+    for(const url of queries) {
       try {
-        await p.goto(url,{waitUntil:"domcontentloaded",timeout:20000});
-        await p.waitForTimeout(1000);
-        const links=await p.locator("a[href]").evaluateAll(nodes=>nodes.map(a=>a.href));
-        for(let u of links){
-          try{
+        await page.goto(url,{waitUntil:"domcontentloaded",timeout:14000});
+        const links=await page.locator("a[href]").evaluateAll(nodes=>nodes.map(a=>a.href));
+        for(let u of links) {
+          try {
             const parsed=new URL(u);
-            if(parsed.hostname.includes("google")&&parsed.pathname==="/url"){
-              u=parsed.searchParams.get("q")||u;
-            }
+            if(parsed.hostname.includes("google")&&parsed.pathname==="/url")u=parsed.searchParams.get("q")||u;
+            if(parsed.hostname.includes("duckduckgo")&&parsed.pathname.startsWith("/l/"))u=parsed.searchParams.get("uddg")||u;
             found.push(u);
           }catch{}
         }
-        if(sanitizeLinks(found).length>=5)break;
       }catch{}
     }
-  }finally{await p.close().catch(()=>{});}
-  return sanitizeLinks(found);
+  }finally{await page.close().catch(()=>{});}
+  return sanitizeLinks(found).slice(0,20);
 }
 async function fetchCandidate(context,url,item) {
   try{
@@ -132,7 +131,7 @@ async function discover(context,item) {
     return {imageUrl:pilotURL,pageUrl:pilotPage,match:"manually verified exact EAN and 144-patch packaging"};
   }
   const links=await searchUrls(context,item.barcode,item.name);
-  for(const link of links.slice(0,7)){
+  for(const link of links.slice(0,12)){
     const c=await fetchCandidate(context,link,item);
     if(c)return c;
   }

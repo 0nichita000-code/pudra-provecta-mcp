@@ -1,1 +1,1 @@
-2026-11-02: check actual Swiper slide count and matching product identity (SADOER). Dry-run.
+2026-11-02: inspect upload controls for confirmed empty SADOER 6942349749902. Dry-run.

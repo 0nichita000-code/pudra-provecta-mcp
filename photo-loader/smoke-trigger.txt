@@ -1,2 +1,1 @@
-PUDRA PHOTO LOADER smoke test - 2026-11-02
-DRY RUN only: no product modifications permitted.
+PUDRA PHOTO LOADER dry-run 2 — retry with Provecta login variants. No product mutations.

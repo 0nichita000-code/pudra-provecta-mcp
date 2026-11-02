@@ -199,11 +199,13 @@ async function loginUI(page){
     const choose=page.getByText("Select",{exact:true}).first();
     if(await choose.isVisible().catch(()=>false))await company.click().catch(()=>{});
   }
+  // AngularJS needs additional time to render the company header after sign-in.
+  await page.getByText(/FAMILYTURCOMPANY|PUDRA COMPANY/i).first()
+    .waitFor({state:"visible",timeout:25000}).catch(()=>{});
   const pageText=await page.locator("body").innerText().catch(()=>"");
-  console.log("[PHOTO LOGIN]",JSON.stringify({route:new URL(page.url()).hash.split("?")[0].slice(0,65),bodyChars:pageText.length,hasCompany:/FAMILYTURCOMPANY|PUDRA COMPANY/i.test(pageText),hasProducts:/products/i.test(pageText)}));
+  console.log("[PHOTO LOGIN]",JSON.stringify({route:new URL(page.url()).hash.split("?")[0].slice(0,65),bodyChars:pageText.length,hasCompany:/FAMILYTURCOMPANY|PUDRA COMPANY/i.test(pageText)}));
   if(!/FAMILYTURCOMPANY|PUDRA COMPANY/i.test(pageText)){
-    // The company header can be hidden before a company is selected. Fail safely.
-    throw new Error("FAMILYTURCOMPANY account is not confirmed in browser");
+    throw new Error("FAMILYTURCOMPANY account is not confirmed after waiting for dashboard");
   }
 }
 async function openImages(page,item) {

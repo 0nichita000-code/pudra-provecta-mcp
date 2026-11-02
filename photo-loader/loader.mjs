@@ -27,8 +27,10 @@ export function isMatchingProductPage(html, item) {
   if (!item.barcode || !text.includes(item.barcode)) return false;
   const tokens = nameTokens(item.name);
   if (tokens.length < 2) return false;
+  const modelTokens=tokens.filter(t=>/[A-Z]+[0-9]{3,}|[0-9]{3,}[A-Z]+/.test(t));
+  if(modelTokens.some(t=>!text.includes(t)))return false;
   const matches = tokens.filter(t => text.includes(t));
-  return matches.length >= 2 && (matches.length / tokens.length >= 0.34);
+  return matches.length >= Math.min(3,tokens.length) && (matches.length / tokens.length >= 0.5);
 }
 function decodeEntities(x) {
   return String(x || "").replace(/&amp;/g,"&").replace(/&quot;/g,'"')

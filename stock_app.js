@@ -18,6 +18,18 @@ export function createStockApp(deps) {
   console.info("[PUDRA STORAGE] backend="+(storage.persistent?"postgresql":"temporary-file"));
   const workflowRead=storage.read;
   const workflowWrite=storage.write;
+  // Verify real database read/write on each server start; log only status, never credentials.
+  void (async()=>{
+    try{
+      if(!storage.persistent){console.warn("[PUDRA STORAGE] durable_write_test=skipped no_database_config");return;}
+      const token=Date.now().toString(36);
+      await workflowWrite(db=>{db._storageProbe=token;});
+      const verify=await workflowRead();
+      if(verify._storageProbe!==token)throw Error("Database write/read mismatch");
+      console.info("[PUDRA STORAGE] durable_write_test=passed documents="+(verify.documents?.length??0));
+    }catch(e){console.error("[PUDRA STORAGE] durable_write_test=FAILED "+String(e?.message||e));}
+  })();
+
   function goodCount(x){const n=Number(x);return Number.isFinite(n)&&n>=0&&n<=1e7?n:null;}
 
   // Verified Provecta UI alternate barcode that the public article API omits.

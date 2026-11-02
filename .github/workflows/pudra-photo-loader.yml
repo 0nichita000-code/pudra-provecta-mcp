@@ -1,0 +1,77 @@
+name: PUDRA PHOTO LOADER
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '17 */2 * * *'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pudra-photo-loader
+  cancel-in-progress: false
+
+jobs:
+  upload:
+    runs-on: ubuntu-latest
+    timeout-minutes: 22
+    env:
+      PROVECTA_USERNAME: ${{ secrets.PROVECTA_USERNAME }}
+      PROVECTA_PASSWORD: ${{ secrets.PROVECTA_PASSWORD }}
+      PROVECTA_CLIENT_ID: ${{ secrets.PROVECTA_CLIENT_ID }}
+      PHOTO_LIVE: 'true'
+      PHOTO_BATCH_SIZE: '3'
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Explain missing configuration
+        if: ${{ env.PROVECTA_USERNAME == '' || env.PROVECTA_PASSWORD == '' }}
+        run: |
+          echo "PUDRA PHOTO LOADER: GitHub secrets PROVECTA_USERNAME and PROVECTA_PASSWORD are required." >> "$GITHUB_STEP_SUMMARY"
+          echo "No images were modified." >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Restore checkpoint
+        if: ${{ env.PROVECTA_USERNAME != '' && env.PROVECTA_PASSWORD != '' }}
+        uses: actions/cache/restore@v4
+        with:
+          path: photo-loader/state.json
+          key: pudra-photo-state-${{ github.run_id }}
+          restore-keys: pudra-photo-state-
+
+      - name: Setup Node
+        if: ${{ env.PROVECTA_USERNAME != '' && env.PROVECTA_PASSWORD != '' }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install browser dependencies
+        if: ${{ env.PROVECTA_USERNAME != '' && env.PROVECTA_PASSWORD != '' }}
+        run: |
+          cd photo-loader
+          npm install --no-audit --no-fund
+          npx playwright install --with-deps chromium
+
+      - name: Unit tests
+        if: ${{ env.PROVECTA_USERNAME != '' && env.PROVECTA_PASSWORD != '' }}
+        run: npm --prefix photo-loader test
+
+      - name: Upload matched product images
+        if: ${{ env.PROVECTA_USERNAME != '' && env.PROVECTA_PASSWORD != '' }}
+        run: node photo-loader/loader.mjs
+
+      - name: Save checkpoint
+        if: ${{ always() && env.PROVECTA_USERNAME != '' && env.PROVECTA_PASSWORD != '' }}
+        uses: actions/cache/save@v4
+        with:
+          path: photo-loader/state.json
+          key: pudra-photo-state-${{ github.run_id }}
+
+      - name: Publish run summary
+        if: always()
+        run: |
+          echo "PUDRA PHOTO LOADER" >> "$GITHUB_STEP_SUMMARY"
+          if [ -f photo-loader/state.json ]; then
+            node -e 'const s=require("./photo-loader/state.json"); const r=s.runs?.[0]||{}; process.stdout.write(JSON.stringify(r,null,2))' >> "$GITHUB_STEP_SUMMARY" || true
+          fi

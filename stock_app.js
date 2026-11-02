@@ -181,7 +181,7 @@ export function createStockApp(deps) {
     if(url.pathname==="/stock/api/count-documents"){
       if(req.method==="GET"){
         const depot=url.searchParams.get("depotId")||"";const db=await workflowRead();
-        sendJson(res,200,{items:db.documents.filter(x=>a.admin||(x.depotId===depot&&depot===a.depotId)).map(x=>({id:x.id,title:x.title,type:x.type,depotId:x.depotId,status:x.status,createdAt:x.createdAt,items:x.items.length,checked:x.items.filter(y=>y.actual!==null).length}))});return true;
+        sendJson(res,200,{items:db.documents.filter(x=>a.admin||(x.depotId===depot&&depot===a.depotId)).map(x=>({id:x.id,title:x.title,type:x.type,depotId:x.depotId,status:x.status,createdAt:x.createdAt,receiptDate:x.receiptDate||x.createdAt,items:x.items.length,checked:x.items.filter(y=>y.actual!==null).length}))});return true;
       }
       if(req.method==="POST"){
         if(!a.admin){sendJson(res,403,{error:"Только администратор может загружать документы"});return true;}
@@ -190,7 +190,7 @@ export function createStockApp(deps) {
         if(!Array.isArray(b.items)||b.items.length>8000||!b.items.length){sendJson(res,400,{error:"Документ пуст или слишком большой"});return true;}
         const items=b.items.map(x=>({name:String(x.name||"").slice(0,300),barcode:String(x.barcode||"").trim().slice(0,70),expected:goodCount(x.expected),actual:null,updatedBy:"",updatedAt:""}));
         if(items.some(x=>!x.barcode||x.expected===null)){sendJson(res,400,{error:"Требуется штрихкод и корректное количество"});return true;}
-        const doc=await workflowWrite(db=>{const v={id:String(Date.now())+String(Math.floor(Math.random()*100000)),title:String(b.title||"Приёмка").slice(0,150),type:b.type,depotId:b.depotId,status:"OPEN",createdAt:new Date().toISOString(),items};db.documents.unshift(v);return v;});
+        const doc=await workflowWrite(db=>{const v={id:String(Date.now())+String(Math.floor(Math.random()*100000)),title:String(b.title||"Приёмка").slice(0,150),type:b.type,depotId:b.depotId,status:"OPEN",createdAt:new Date().toISOString(),receiptDate:/^\d{4}-\d{2}-\d{2}$/.test(String(b.receiptDate||""))?b.receiptDate:new Date().toISOString().slice(0,10),items};db.documents.unshift(v);return v;});
         sendJson(res,201,{id:doc.id});return true;
       }
     }
@@ -200,6 +200,11 @@ export function createStockApp(deps) {
       const depot=url.searchParams.get("depotId")||"";
       if(!a.admin&&(depot!==doc.depotId||a.depotId!==doc.depotId)){sendJson(res,403,{error:"Документ другого магазина"});return true;}
       if(req.method==="GET"){sendJson(res,200,{document:doc});return true;}
+      if(req.method==="DELETE"){
+        if(!a.admin){sendJson(res,403,{error:"Удаление разрешено только администратору"});return true;}
+        await workflowWrite(db=>{db.documents=db.documents.filter(x=>x.id!==id);});
+        sendJson(res,200,{ok:true});return true;
+      }
       if(req.method==="PATCH"){
         if(doc.status!=="OPEN"){sendJson(res,409,{error:"Документ закрыт"});return true;}
         const b=await readBody(req);const n=goodCount(b.actual);const index=Number(b.index);

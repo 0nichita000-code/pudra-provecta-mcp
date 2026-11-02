@@ -64,19 +64,15 @@ function flashScanFrame(){
   setTimeout(()=>f.classList.remove("ok"),700);
 }
 async function tuneCamera(track){
+  // Leave camera optics at native 1x. Forcing both continuous focus and 1.5x
+  // on iOS can cause persistent hunting, especially for close-up barcodes.
   try{
-    if(!track?.getCapabilities)return;
-    const caps=track.getCapabilities();
-    const advanced={};
-    if(caps?.focusMode?.includes?.("continuous"))advanced.focusMode="continuous";
+    const caps=track?.getCapabilities?.();
     if(caps?.zoom){
-      const min=Number(caps.zoom.min ?? 1);
-      const max=Number(caps.zoom.max ?? 1);
-      const target=Math.min(max,Math.max(min,1.5));
-      if(Number.isFinite(target))advanced.zoom=target;
+      const min=Number(caps.zoom.min??1),max=Number(caps.zoom.max??1);
+      if(min<=1&&max>=1)await track.applyConstraints({advanced:[{zoom:1}]});
     }
-    if(Object.keys(advanced).length)await track.applyConstraints({advanced:[advanced]});
-  }catch{}
+  }catch(e){console.warn("Camera initial zoom",e)}
 }
 
 function pushNotice(title,body){try{if("Notification" in window&&Notification.permission==="granted")new Notification(title,{body});}catch{}}

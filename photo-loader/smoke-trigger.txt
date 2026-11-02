@@ -1,1 +1,1 @@
-PUDRA PHOTO LOADER safe dry-run: swiper gallery counter parsing fix, no writes.
+2026-11-02: scan five SADOER barcodes in photo-loader dry-run. No writes.

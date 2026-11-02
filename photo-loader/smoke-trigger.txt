@@ -1,1 +1,1 @@
-2026-11-02: candidate search for SADOER acne patch EAN 6942349781780. No writes.
+2026-11-02: validated SADOER 6942349781780 image source safe no-write pilot.

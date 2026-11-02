@@ -25,12 +25,14 @@ export function isMatchingProductPage(html, item) {
     .replace(/<style[\s\S]*?<\/style>/gi," ").replace(/<[^>]*>/g," ")
     .replace(/&(?:nbsp|amp|quot);/gi," ").toUpperCase();
   if (!item.barcode || !text.includes(item.barcode)) return false;
+  const title=(String(html||"").match(/<title[^>]*>([\s\S]*?)<\/title>/i)?.[1]||"").replace(/<[^>]*>/g," ").toUpperCase();
   const tokens = nameTokens(item.name);
   if (tokens.length < 2) return false;
   const modelTokens=tokens.filter(t=>/[A-Z]+[0-9]{3,}|[0-9]{3,}[A-Z]+/.test(t));
   if(modelTokens.some(t=>!text.includes(t)))return false;
   const matches = tokens.filter(t => text.includes(t));
-  return matches.length >= Math.min(3,tokens.length) && (matches.length / tokens.length >= 0.5);
+  const titleMatches=tokens.filter(t => title.includes(t));
+  return titleMatches.length >= 2 && matches.length >= Math.min(3,tokens.length) && (matches.length / tokens.length >= 0.5);
 }
 function decodeEntities(x) {
   return String(x || "").replace(/&amp;/g,"&").replace(/&quot;/g,'"')
@@ -45,7 +47,7 @@ export function ogImage(html, pageUrl) {
     if (!m) continue;
     try {
       const url = new URL(decodeEntities(m[1] || m[2] || m[3]),pageUrl);
-      if (url.protocol === "https:" && !/logo|favicon|placeholder|default|sprite|icon/i.test(url.pathname)) return url.toString();
+      if (url.protocol === "https:" && !/logo|favicon|placeholder|default|sprite|icon|cover|banner|site[-_]image/i.test(url.pathname)) return url.toString();
     } catch {}
   }
   return null;
@@ -338,7 +340,8 @@ export async function run(){
     const page=await context.newPage();
     await loginUI(page);
     let visited=0;
-    while(log.checked<LIMIT*10&&log.found<LIMIT&&visited<Math.min(items.length,MAX_LOOKUPS)){
+    const deadline=Date.now()+12*60*1000;
+    while(Date.now()<deadline&&log.checked<LIMIT*10&&log.found<LIMIT&&visited<Math.min(items.length,MAX_LOOKUPS)){
       const index=state.cursor%items.length;
       const item=items[index];
       state.cursor=(index+1)%items.length;

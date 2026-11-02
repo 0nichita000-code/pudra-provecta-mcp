@@ -1,7 +1,7 @@
 import fs from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
-import { chromium } from "playwright";
+
 
 const ROOT = path.dirname(fileURLToPath(import.meta.url));
 const STATE_FILE = path.join(ROOT, "state.json");
@@ -10,7 +10,7 @@ const USER = process.env.PROVECTA_USERNAME || "";
 const PASS = process.env.PROVECTA_PASSWORD || "";
 const LIVE = process.env.PHOTO_LIVE === "true";
 const LIMIT = Math.min(10, Math.max(1, Number(process.env.PHOTO_BATCH_SIZE || 3)));
-const MAX_LOOKUPS = LIMIT * 5;
+const MAX_LOOKUPS = LIMIT * 20;
 const RETRY_AFTER_MS = 30 * 86400000;
 const MAX_IMAGE_BYTES = 6_000_000;
 const STOP = new Set(["and","the","face","for","with","item","no","new","color","set","ml","ton","women","men","asortiment","mix","pcs","buc","sau","long","lasting","makeup","lip","eye","50","100","20","40","60"]);
@@ -158,7 +158,7 @@ async function loginUI(page){
   await page.waitForTimeout(2500);
   const pass=page.locator('input[type="password"]').first();
   if(await pass.isVisible().catch(()=>false)){
-    const user=page.locator('input[type="text"],input[type="email"]').filter({visible:true}).first();
+    const user=page.locator('input[type="text"]:visible,input[type="email"]:visible').first();
     if(!(await user.count()))throw new Error("UI login username field not found");
     await user.fill(USER);
     await pass.fill(PASS);
@@ -174,6 +174,11 @@ async function loginUI(page){
     const company=page.getByText("FAMILYTURCOMPANY",{exact:true}).first();
     const choose=page.getByText("Select",{exact:true}).first();
     if(await choose.isVisible().catch(()=>false))await company.click().catch(()=>{});
+  }
+  const pageText=await page.locator("body").innerText().catch(()=>"");
+  if(!/FAMILYTURCOMPANY|PUDRA COMPANY/i.test(pageText)){
+    // The company header can be hidden before a company is selected. Fail safely.
+    throw new Error("FAMILYTURCOMPANY account is not confirmed in browser");
   }
 }
 async function openImages(page,item) {
@@ -237,12 +242,13 @@ export async function run(){
   if(!items.length)throw new Error("No Provecta products loaded");
   let browser;
   try{
+    const {chromium}=await import("playwright");
     browser=await chromium.launch({headless:true,args:["--no-sandbox","--disable-dev-shm-usage"]});
     const context=await browser.newContext({locale:"ru-RU",viewport:{width:1440,height:900}});
     const page=await context.newPage();
     await loginUI(page);
     let visited=0;
-    while(log.checked<LIMIT&&visited<Math.min(items.length,MAX_LOOKUPS)){
+    while(log.checked<LIMIT*10&&log.found<LIMIT&&visited<Math.min(items.length,MAX_LOOKUPS)){
       const index=state.cursor%items.length;
       const item=items[index];
       state.cursor=(index+1)%items.length;

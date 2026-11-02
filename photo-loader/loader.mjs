@@ -155,7 +155,8 @@ async function getCatalog() {
         if(auth?.token||auth?.Token)break;
         failures.push(variant+": missing token");
       } catch(error) {
-        const status=String(error?.message||error).match(/HTTP\s+(\d+)/)?.[1]||"network";
+        const message=String(error?.message||error);
+        const status=message.match(/HTTP\s+(\d+)/)?.[1] || String(error?.cause?.code||error?.code||error?.cause?.name||error?.name||"network").replace(/[^A-Za-z0-9_-]/g,"").slice(0,60);
         failures.push(variant+": "+status);
       }
     }

@@ -1,0 +1,2 @@
+PUDRA PHOTO LOADER smoke test - 2026-11-02
+DRY RUN only: no product modifications permitted.

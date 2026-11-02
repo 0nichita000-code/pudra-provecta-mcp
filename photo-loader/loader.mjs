@@ -224,13 +224,18 @@ async function openImages(page,item) {
     throw new Error("Images tab unavailable; route="+hash+" tabLabels="+JSON.stringify(labels)+" bodyChars="+body.length+" productNameVisible="+body.includes(String(item.name).toLowerCase().slice(0,12)));
   }
   await tab.click();
-  await page.waitForTimeout(600);
+  await page.waitForTimeout(2500);
   const text=(await page.locator("body").innerText()).slice(-8000);
   const images=await page.locator(".swiper-container.well img[src],.swiper-container .swiper-slide img[src]").count();
   const counters=[...text.matchAll(/\b(\d{1,4})\s*\/\s*(\d{1,4})\b/g)].map(m=>({position:Number(m[1]),total:Number(m[2])}));
   if(images>0||counters.some(x=>x.total>0))return "exists";
   if(!/\b0\s*\/\s*0\b/.test(text)&&!/\b0\s+of\s+0\b/i.test(text)){
-    throw new Error("Image gallery not clearly empty; skipped for safety");
+    const swiperTexts=(await page.locator(".swiper-container,.swiper-pagination,.swiper-slide").allTextContents().catch(()=>[]))
+      .map(x=>x.trim().slice(0,60)).filter(Boolean).slice(0,4);
+    const currentNameVisible=text.toLowerCase().includes(String(item.name).toLowerCase().slice(0,10));
+    const barcodeVisible=text.includes(item.barcode);
+    const imgtotal=await page.locator("img").count();
+    throw new Error("Gallery ambiguous; galleryImgs="+images+" totalImgs="+imgtotal+" productNameVisible="+currentNameVisible+" barcodeVisible="+barcodeVisible+" swiperText="+JSON.stringify(swiperTexts));
   }
   return "empty";
 }

@@ -15,6 +15,7 @@ export function createStockApp(deps) {
   // PUDRA employee count workflows. For production use configure STOCK_WORKFLOW_PATH on a persistent disk.
   const workflowPath=process.env.STOCK_WORKFLOW_PATH||"/tmp/pudra-stock-workflows.json";
   const storage=workflowStorage(workflowPath,Pool);
+  console.info("[PUDRA STORAGE] backend="+(storage.persistent?"postgresql":"temporary-file"));
   const workflowRead=storage.read;
   const workflowWrite=storage.write;
   function goodCount(x){const n=Number(x);return Number.isFinite(n)&&n>=0&&n<=1e7?n:null;}

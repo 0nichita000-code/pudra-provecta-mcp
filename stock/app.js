@@ -596,6 +596,7 @@ $("startScan").addEventListener("click",startScan);$("stopScan").addEventListene
 document.querySelectorAll(".tab").forEach(b=>b.addEventListener("click",()=>tab(b.dataset.tab)));
 updatePinVisibility();
 
+document.querySelectorAll("#scanZoomControls [data-zoom]").forEach(btn=>btn.addEventListener("click",async()=>{const value=Number(btn.dataset.zoom);const ok=await window.PUDRA_SHARED_SCANNER.zoom(value);msg($("scanInfo"),ok?"Увеличение "+value+"×":"Аппаратный зум недоступен в этом браузере",ok?"ok":"bad")}));
 window.PUDRA_SHARED_SCANNER={
  start:startScan,
  stop:stopScan,

@@ -1,0 +1,1 @@
+Live PUDRA photo-loader batch smoke launch 2026-11-02. No barcode override; batch size 5, safety guard on.

@@ -260,14 +260,14 @@ async function openImages(page,item) {
     class:String(el.className).slice(0,100)
   })).filter(x=>/upload|image|загруз|încărc/i.test(x.text)).slice(0,12)).catch(()=>[]);
   if(process.env.PHOTO_DEBUG_GALLERY==="true")console.log("[PHOTO UPLOAD CONTROLS]",JSON.stringify(possible));
-  const uploadButton=page.locator("button,a,.btn").filter({hasText:/^(upload|загрузить|încărca|incarca)$/i}).first();
+  const uploadButton=page.locator("a.btn-primary:visible,button.btn-primary:visible").filter({hasText:/upload|загрузить|încărca|incarca/i}).first();
   if(!(await uploadButton.isVisible().catch(()=>false)))throw new Error("Gallery empty but upload control unavailable; candidateCount="+possible.length);
   return "empty";
 }
 async function upload(page,url) {
-  const button=page.getByRole("button",{name:/^(upload|загрузить|încărca|incarca)$/i}).first();
-  if(await button.count())await button.click();
-  else await page.getByText(/^(Upload|Загрузить|Încarcă|Incarca)$/i).first().click();
+  const button=page.locator("a.btn-primary:visible,button.btn-primary:visible")
+    .filter({hasText:/upload|загрузить|încărca|incarca/i}).first();
+  await button.click({timeout:10000});
   const input=page.locator('input[name="imageurl"],input[placeholder="Paste link here"]').last();
   await input.waitFor({state:"visible",timeout:10000});
   await input.fill(url);

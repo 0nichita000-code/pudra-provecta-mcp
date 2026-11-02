@@ -1,1 +1,1 @@
-PUDRA Photo Loader: safe follow-up dry-run after company context wait. 2026-11-02
+PUDRA PHOTO LOADER safe dry-run: swiper gallery counter parsing fix, no writes.

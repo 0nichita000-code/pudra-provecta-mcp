@@ -1,1 +1,1 @@
-PUDRA PHOTO LOADER DRY RUN #10 - verify existing SADOER photo counter, no changes.
+PUDRA PHOTO LOADER DRY RUN #11 - safe gallery diagnostics on known item.

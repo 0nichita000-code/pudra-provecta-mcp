@@ -88,6 +88,7 @@ video{width:100%;height:210px;border-radius:16px;background:#000;object-fit:cove
           <video id="video" playsinline muted></video>
           <div id="scanFrame" class="scanFrame"></div>
         </div>
+        <div id="scanZoomControls" class="row" style="margin-top:10px;gap:8px;flex-wrap:wrap"><button type="button" class="ghost" data-zoom="1">1×</button><button type="button" class="ghost" data-zoom="2">2× мелкий штрихкод</button><button type="button" class="ghost" data-zoom="3">3×</button></div>
         <div class="row" style="margin-top:10px">
           <button id="startScan" class="primary">Запустить камеру</button>
           <button id="stopScan" class="ghost">Остановить</button>
@@ -165,6 +166,6 @@ setTimeout(function(){
   if(s){s.classList.add("ready");setTimeout(function(){s.classList.add("hidden")},320);}
 },2500);
 </script>
-<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script><script src="./app.js?v=20261102-zoom"></script><script src="./count.js?v=20261102-retry"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script><script src="./app.js?v=20261102-allzoom2"></script><script src="./count.js?v=20261102-allzoom2"></script>
 </body>
 </html>

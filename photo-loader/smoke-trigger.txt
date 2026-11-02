@@ -1,1 +1,1 @@
-PUDRA PHOTO LOADER DRY RUN #9 - force tab diagnostics for known item, no write.
+PUDRA PHOTO LOADER DRY RUN #10 - verify existing SADOER photo counter, no changes.

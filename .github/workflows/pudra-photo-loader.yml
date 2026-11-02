@@ -2,9 +2,6 @@ name: PUDRA PHOTO LOADER
 
 on:
   workflow_dispatch:
-  push:
-    branches: [main]
-    paths: ['photo-loader/launch-trigger.txt']
   schedule:
     - cron: '17 */2 * * *'
 

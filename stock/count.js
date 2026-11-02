@@ -48,8 +48,9 @@ async function refresh(){
  try{const data=await request("/stock/api/count-documents?depotId="+encodeURIComponent(depot()));
  const items=data.items.filter(x=>x.depotId===depot());
  msg(items.length?"Документов магазина: "+items.length:"Документов для этого магазина пока нет.");
- $("countDocs").innerHTML=items.map(x=>'<button class="ghost countOpen" data-id="'+escape(x.id)+'" style="width:100%;text-align:left;margin-top:8px"><strong>'+escape(x.title)+'</strong><div class="muted">'+(x.type==="receipt"?"Приёмка":"Инвентаризация")+' · проверено '+x.checked+' из '+x.items+'</div></button>').join("");
- $("countDocs").querySelectorAll(".countOpen").forEach(el=>el.onclick=()=>open(el.dataset.id))
+ $("countDocs").innerHTML=items.map(x=>'<div style="display:flex;gap:8px;align-items:center;margin-top:8px"><button class="ghost countOpen" data-id="'+escape(x.id)+'" style="flex:1;text-align:left"><strong>'+escape(x.title)+'</strong><div class="muted">'+(x.type==="receipt"?"Приёмка":"Инвентаризация")+' · Дата: '+escape(String(x.receiptDate||x.createdAt||"").slice(0,10))+' · проверено '+x.checked+' из '+x.items+'</div></button>'+(profile().role==="admin"?'<button class="ghost countDelete" data-id="'+escape(x.id)+'" style="color:#b91c1c">Удалить</button>':"")+'</div>').join("");
+ $("countDocs").querySelectorAll(".countOpen").forEach(el=>el.onclick=()=>open(el.dataset.id));
+ $("countDocs").querySelectorAll(".countDelete").forEach(el=>el.onclick=async()=>{if(!confirm("Удалить документ навсегда? Это действие нельзя отменить."))return;try{await request("/stock/api/count-documents/"+el.dataset.id+"?depotId="+encodeURIComponent(depot()),"DELETE");await refresh()}catch(e){alert(e.message)}});
  }catch(e){msg("Ошибка загрузки: "+e.message)}
 }
 async function open(id){
@@ -85,7 +86,7 @@ async function upload(){
  if(n<0||b<0||q<0)throw Error("Нужны столбцы НАЗВАНИЕ, ШТРИХКОД, КОЛИЧЕСТВО");
  const map=new Map();for(const row of arr){const code=String(row[b]||"").trim();if(!code)continue;const amount=Number(String(row[q]||"").trim().replace(",","."));if(!Number.isFinite(amount)||amount<0)throw Error("Некорректное количество: "+code);const prev=map.get(code);if(prev)prev.expected+=amount;else map.set(code,{name:row[n]||"",barcode:code,expected:amount})}
  const items=[...map.values()];if(!items.length)throw Error("Нет товаров с штрихкодами");
- const d=await request("/stock/api/count-documents","POST",{title:$("countDocName").value.trim()||(file?file.name:"Документ из таблицы"),depotId:$("countUploadDepot").value,type:$("countDocType").value,items});
+ const d=await request("/stock/api/count-documents","POST",{title:$("countDocName").value.trim()||(file?file.name:"Документ из таблицы"),depotId:$("countUploadDepot").value,type:$("countDocType").value,receiptDate:$("countReceiptDate").value,items});
  $("countUploadInfo").textContent="Готово: загружено "+items.length+" позиций. Документ №"+d.id;
  if($("countUploadDepot").value===depot())refresh();
  }catch(e){$("countUploadInfo").textContent="Не загружено: "+e.message}

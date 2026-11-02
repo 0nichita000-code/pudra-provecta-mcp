@@ -26,6 +26,7 @@ jobs:
       PHOTO_LIVE: 'false'
       PHOTO_BATCH_SIZE: '1'
       PHOTO_TEST_BARCODE: '6942349733154'
+      PHOTO_FORCE_RECHECK: 'true'
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4

@@ -26,6 +26,9 @@ jobs:
       PHOTO_LIVE: 'false'
       PHOTO_BATCH_SIZE: '1'
       PHOTO_TEST_BARCODES: '6942349781780'
+      PHOTO_PILOT_BARCODE: '6942349781780'
+      PHOTO_PILOT_IMAGE_URL: 'https://www.tiendalafe.com/cdn/shop/files/23a76a7c-f1eb-4d72-8f0e-87ceec8505cf.jpg?v=1785383024'
+      PHOTO_PILOT_SOURCE_PAGE: 'https://www.tiendalafe.com/products/parches-hidrocoloides-para-acne-en-forma-de-estrella-sadoer-144-und'
       PHOTO_FORCE_RECHECK: 'true'
       PHOTO_DEBUG_GALLERY: 'false'
     steps:

@@ -115,6 +115,22 @@ async function fetchCandidate(context,url,item) {
   }catch{return null;}
 }
 async function discover(context,item) {
+  // One manually reviewed source for the pilot. The original retailer page
+  // explicitly lists this exact EAN; the supplied photo shows the 144-star variant.
+  const pilotEAN=String(process.env.PHOTO_PILOT_BARCODE||"").trim();
+  const pilotURL=String(process.env.PHOTO_PILOT_IMAGE_URL||"").trim();
+  const pilotPage=String(process.env.PHOTO_PILOT_SOURCE_PAGE||"").trim();
+  if(pilotEAN && item.barcode===pilotEAN && pilotURL && pilotPage) {
+    const uri=new URL(pilotURL);
+    if(uri.protocol!=="https:")throw new Error("Pilot image must use HTTPS");
+    const img=await context.request.get(uri.toString(),{timeout:15000,maxRedirects:3});
+    const mime=img.headers()["content-type"]||"";
+    const content=await img.body();
+    if(!img.ok()||!mime.startsWith("image/")||/svg/i.test(mime)||content.length<5000||content.length>MAX_IMAGE_BYTES) {
+      throw new Error("Pilot image URL not a valid raster product photo");
+    }
+    return {imageUrl:pilotURL,pageUrl:pilotPage,match:"manually verified exact EAN and 144-patch packaging"};
+  }
   const links=await searchUrls(context,item.barcode,item.name);
   for(const link of links.slice(0,7)){
     const c=await fetchCandidate(context,link,item);
@@ -271,16 +287,17 @@ async function upload(page,url) {
   const input=page.locator('input[name="imageurl"],input[placeholder="Paste link here"]').last();
   await input.waitFor({state:"visible",timeout:10000});
   await input.fill(url);
-  const apply=page.getByRole("button",{name:/^(apply|применить|aplică|aplica)$/i}).last();
+  const apply=page.locator('[ng-click="ok()"]:visible').first();
+  if(!(await apply.count()))throw new Error("Image Apply control not present");
   await apply.click();
-  await page.waitForTimeout(1800);
-  const save=page.getByRole("button",{name:/^(save|сохранить|salvează|salveaza)$/i}).first();
-  if(!(await save.count()))throw new Error("Could not locate product Save button");
+  await input.waitFor({state:"hidden",timeout:20000});
+  const save=page.locator("button:visible,a.btn:visible").filter({hasText:/^(save|сохранить|salvează|salveaza)$/i}).first();
+  if(!(await save.isVisible().catch(()=>false)))throw new Error("Product Save button unavailable");
   await save.click();
-  await page.waitForTimeout(1800);
+  await page.waitForTimeout(2500);
   const errors=page.getByText(/error|failed|ошибка/i);
   if(await errors.first().isVisible().catch(()=>false))throw new Error("Provecta reported an upload/save error");
-  // Do not reopen the card: on next batch, its gallery will be checked again.
+  // Do not reopen this product after Save, per owner request.
 }
 async function loadState(){
   try{

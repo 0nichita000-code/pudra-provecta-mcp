@@ -14,9 +14,9 @@ export function createStockApp(deps) {
   const discrepancies = [];
   // PUDRA employee count workflows. For production use configure STOCK_WORKFLOW_PATH on a persistent disk.
   const workflowPath=process.env.STOCK_WORKFLOW_PATH||"/tmp/pudra-stock-workflows.json";
-  let workflowCache=null, workflowLock=Promise.resolve();
-  async function workflowRead(){if(workflowCache)return workflowCache;try{workflowCache=JSON.parse(await fs.readFile(workflowPath,"utf8"));}catch{workflowCache={documents:[]};}return workflowCache;}
-  function workflowWrite(fn){const task=workflowLock.then(async()=>{const db=await workflowRead();const result=await fn(db);await fs.mkdir(path.dirname(workflowPath),{recursive:true});await fs.writeFile(workflowPath+".tmp",JSON.stringify(db));await fs.rename(workflowPath+".tmp",workflowPath);return result;});workflowLock=task.catch(()=>{});return task;}
+  const storage=workflowStorage(workflowPath,Pool);
+  const workflowRead=storage.read;
+  const workflowWrite=storage.write;
   function goodCount(x){const n=Number(x);return Number.isFinite(n)&&n>=0&&n<=1e7?n:null;}
 
   // Verified Provecta UI alternate barcode that the public article API omits.

@@ -227,23 +227,24 @@ async function openImages(page,item) {
   await page.waitForTimeout(600);
   const text=(await page.locator("body").innerText()).slice(-8000);
   const images=await page.locator(".swiper-container.well img[src],.swiper-container .swiper-slide img[src]").count();
-  if(images>0)return "exists";
+  const counters=[...text.matchAll(/\b(\d{1,4})\s*\/\s*(\d{1,4})\b/g)].map(m=>({position:Number(m[1]),total:Number(m[2])}));
+  if(images>0||counters.some(x=>x.total>0))return "exists";
   if(!/\b0\s*\/\s*0\b/.test(text)&&!/\b0\s+of\s+0\b/i.test(text)){
     throw new Error("Image gallery not clearly empty; skipped for safety");
   }
   return "empty";
 }
 async function upload(page,url) {
-  const button=page.getByRole("button",{name:/^upload$/i}).first();
+  const button=page.getByRole("button",{name:/^(upload|загрузить|încărca|incarca)$/i}).first();
   if(await button.count())await button.click();
-  else await page.getByText("Upload",{exact:true}).first().click();
+  else await page.getByText(/^(Upload|Загрузить|Încarcă|Incarca)$/i).first().click();
   const input=page.locator('input[name="imageurl"],input[placeholder="Paste link here"]').last();
   await input.waitFor({state:"visible",timeout:10000});
   await input.fill(url);
-  const apply=page.getByRole("button",{name:/^apply$/i}).last();
+  const apply=page.getByRole("button",{name:/^(apply|применить|aplică|aplica)$/i}).last();
   await apply.click();
   await page.waitForTimeout(1800);
-  const save=page.getByRole("button",{name:/^save$/i}).first();
+  const save=page.getByRole("button",{name:/^(save|сохранить|salvează|salveaza)$/i}).first();
   if(!(await save.count()))throw new Error("Could not locate product Save button");
   await save.click();
   await page.waitForTimeout(1800);

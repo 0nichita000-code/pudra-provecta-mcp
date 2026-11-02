@@ -229,8 +229,9 @@ async function openImages(page,item) {
   await page.waitForTimeout(2500);
   const text=(await page.locator("body").innerText()).slice(-8000);
   const images=await page.locator(".swiper-container.well img[src],.swiper-container .swiper-slide img[src]").count();
-  const counters=[...text.matchAll(/\b(\d{1,4})\s*\/\s*(\d{1,4})\b/g)].map(m=>({position:Number(m[1]),total:Number(m[2])}));
-  if(images>0||counters.some(x=>x.total>0))return "exists";
+  const galleryText=(await page.locator(".swiper-container,.swiper-pagination,.swiper-slide").allTextContents().catch(()=>[])).join(" | ");
+  const counters=[...(text+" | "+galleryText).matchAll(/\b(\d{1,4})\s*\/\s*(\d{1,4})\b/g)].map(m=>({position:Number(m[1]),total:Number(m[2])}));
+  if(images>0||counters.some(x=>x.total>0&&x.position>0))return "exists";
   if(!/\b0\s*\/\s*0\b/.test(text)&&!/\b0\s+of\s+0\b/i.test(text)){
     const swiperTexts=(await page.locator(".swiper-container,.swiper-pagination,.swiper-slide").allTextContents().catch(()=>[]))
       .map(x=>x.trim().slice(0,60)).filter(Boolean).slice(0,4);

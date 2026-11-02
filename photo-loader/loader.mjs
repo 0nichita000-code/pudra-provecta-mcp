@@ -208,17 +208,20 @@ async function loginUI(page){
 }
 async function openImages(page,item) {
   await page.goto(BASE+"/app/#/product/0?productid="+encodeURIComponent(item.id),{waitUntil:"domcontentloaded",timeout:45000});
-  // Provecta is a large AngularJS app; the product tabs may take many seconds to mount.
-  await page.getByText("Images",{exact:true}).first().waitFor({state:"visible",timeout:30000}).catch(()=>{});
+  // Tab titles are localized (English, Russian, Romanian).
+  const imageTabPattern=/images|изображени|фото|imagini|poze/i;
+  let tab=page.locator(".nav-tabs a, [role=tab]").filter({hasText:imageTabPattern}).first();
+  await tab.waitFor({state:"visible",timeout:30000}).catch(()=>{});
   if(await page.locator('input[type="password"]').first().isVisible().catch(()=>false))throw new Error("Browser session expired");
-  let tab=page.getByRole("tab",{name:/images/i}).first();
-  if(!(await tab.isVisible().catch(()=>false)))tab=page.getByText("Images",{exact:true}).first();
+  if(!(await tab.isVisible().catch(()=>false))){
+    tab=page.getByText(/^(images|изображения|фотографии|фото|imagini|poze)$/i).first();
+  }
   if(!(await tab.isVisible().catch(()=>false))){
     const hash=new URL(page.url()).hash.split("?")[0].slice(0,70);
-    const products=await page.getByText("Products",{exact:true}).count();
+    const labels=(await page.locator(".nav-tabs a, [role=tab]").allTextContents().catch(()=>[]))
+      .map(t=>t.trim().replace(/\\s+/g," ").slice(0,55)).slice(0,16);
     const body=(await page.locator("body").innerText().catch(()=>"")).toLowerCase();
-    const hasPassword=await page.locator('input[type="password"]').first().isVisible().catch(()=>false);
-    throw new Error("Images tab not available after 30s; route="+hash+" productsNav="+products+" bodyChars="+body.length+" hasLogin="+/login|sign in|войти|авторизац/.test(body)+" hasCompany="+/familyturcompany|pudra company/.test(body)+" passwordVisible="+hasPassword);
+    throw new Error("Images tab unavailable; route="+hash+" tabLabels="+JSON.stringify(labels)+" bodyChars="+body.length+" productNameVisible="+body.includes(String(item.name).toLowerCase().slice(0,12)));
   }
   await tab.click();
   await page.waitForTimeout(600);

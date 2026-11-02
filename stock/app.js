@@ -599,7 +599,8 @@ updatePinVisibility();
 window.PUDRA_SHARED_SCANNER={
  start:startScan,
  stop:stopScan,
- setHandler(fn){S.externalScanHandler=typeof fn==="function"?fn:null;S.scanLocked=false}
+ setHandler(fn){S.externalScanHandler=typeof fn==="function"?fn:null;S.scanLocked=false},
+ async zoom(level){const track=S.stream?.getVideoTracks?.()[0];if(!track)return false;try{const c=track.getCapabilities?.(),z=c?.zoom;if(!z)return false;const value=Math.min(Number(z.max),Math.max(Number(z.min),level));await track.applyConstraints({advanced:[{zoom:value}]});return true}catch{return false}}
 };
 async function boot(){
   const splash=$("bootSplash");

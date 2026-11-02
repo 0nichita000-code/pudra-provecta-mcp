@@ -311,9 +311,12 @@ async function saveState(state) {
 function checkedRecently(entry) {
   if(process.env.PHOTO_FORCE_RECHECK==="true")return false;
   if(!entry)return false;
-  if(entry.status==="exists"||entry.status==="saved")return true;
+  if(entry.status==="saved")return true;
+  if(entry.status==="exists")return entry.checkVersion===2;
+  if(entry.status==="dry_run")return false;
+  if(entry.status==="error" && entry.checkVersion!==2)return false;
   if(entry.status==="error")return Date.now()-Date.parse(entry.at||"1970-01-01")<24*60*60*1000;
-  return Date.now()-Date.parse(entry.at||"1970-01-01")<RETRY_AFTER_MS;
+  return Date.now()-Date.parse(entry.at||"1970-01-01")<7*86400000;
 }
 export async function run(){
   const state=await loadState(), now=new Date().toISOString();
@@ -343,7 +346,7 @@ export async function run(){
       visited++;
       if(checkedRecently(state.entries[item.id]))continue;
       log.checked++;
-      const e={at:new Date().toISOString(),barcode:item.barcode,name:item.name};
+      const e={at:new Date().toISOString(),barcode:item.barcode,name:item.name,checkVersion:2};
       try{
         const status=await openImages(page,item);
         if(status==="exists"){

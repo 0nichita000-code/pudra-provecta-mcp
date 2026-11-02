@@ -181,6 +181,20 @@ export function createStockApp(deps) {
     if(req.method==="GET"&&url.pathname==="/stock/api/stores"){const rawDepots=await getDepots(false);sendJson(res,200,{depots:rawDepots.map(simpleDepot).filter(d=>d.id && allowedDepotName(d.name))});return true;}
     const a=authInfo(req); if(!a.ok){sendJson(res,401,{error:"Неверный PIN"});return true;}
 
+    if(url.pathname==="/stock/api/count-storage-status"&&req.method==="GET"){
+      if(!a.admin){sendJson(res,403,{error:"Только администратор"});return true;}
+      try{
+        await workflowRead();
+        sendJson(res,200,{persistent:storage.persistent,mode:storage.persistent?"postgresql":"temporary-file",connected:storage.persistent});
+      }catch(e){sendJson(res,503,{persistent:false,connected:false,error:"Хранилище документов недоступно"});}
+      return true;
+    }
+    if(url.pathname==="/stock/api/count-documents-backup"&&req.method==="GET"){
+      if(!a.admin){sendJson(res,403,{error:"Только администратор"});return true;}
+      const db=await workflowRead();
+      sendJson(res,200,{exportedAt:new Date().toISOString(),source:"PUDRA STOCK",documents:db.documents});
+      return true;
+    }
     if(url.pathname==="/stock/api/count-documents"){
       if(req.method==="GET"){
         const depot=url.searchParams.get("depotId")||"";const db=await workflowRead();

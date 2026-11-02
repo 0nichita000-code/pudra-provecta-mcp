@@ -1,1 +1,1 @@
-2026-11-02: scan five SADOER barcodes in photo-loader dry-run. No writes.
+2026-11-02: inspect HTML markup of one known SADOER photo gallery safely, no changes.

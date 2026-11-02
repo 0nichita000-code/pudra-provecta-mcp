@@ -200,6 +200,7 @@ async function loginUI(page){
     if(await choose.isVisible().catch(()=>false))await company.click().catch(()=>{});
   }
   const pageText=await page.locator("body").innerText().catch(()=>"");
+  console.log("[PHOTO LOGIN]",JSON.stringify({route:new URL(page.url()).hash.split("?")[0].slice(0,65),bodyChars:pageText.length,hasCompany:/FAMILYTURCOMPANY|PUDRA COMPANY/i.test(pageText),hasProducts:/products/i.test(pageText)}));
   if(!/FAMILYTURCOMPANY|PUDRA COMPANY/i.test(pageText)){
     // The company header can be hidden before a company is selected. Fail safely.
     throw new Error("FAMILYTURCOMPANY account is not confirmed in browser");
@@ -215,7 +216,9 @@ async function openImages(page,item) {
   if(!(await tab.isVisible().catch(()=>false))){
     const hash=new URL(page.url()).hash.split("?")[0].slice(0,70);
     const products=await page.getByText("Products",{exact:true}).count();
-    throw new Error("Images tab not available after 30s; route="+hash+" productsNav="+products);
+    const body=(await page.locator("body").innerText().catch(()=>"")).toLowerCase();
+    const hasPassword=await page.locator('input[type="password"]').first().isVisible().catch(()=>false);
+    throw new Error("Images tab not available after 30s; route="+hash+" productsNav="+products+" bodyChars="+body.length+" hasLogin="+/login|sign in|войти|авторизац/.test(body)+" hasCompany="+/familyturcompany|pudra company/.test(body)+" passwordVisible="+hasPassword);
   }
   await tab.click();
   await page.waitForTimeout(600);
@@ -267,8 +270,10 @@ export async function run(){
     console.log(JSON.stringify({status:"NEEDS_CONFIGURATION",...log}));
     return;
   }
-  const items=await getCatalog();
-  if(!items.length)throw new Error("No Provecta products loaded");
+  const allItems=await getCatalog();
+  const onlyBarcode=String(process.env.PHOTO_TEST_BARCODE||"").trim();
+  const items=onlyBarcode?allItems.filter(x=>x.barcode===onlyBarcode):allItems;
+  if(!items.length)throw new Error("No matching Provecta products loaded");
   let browser;
   try{
     const {chromium}=await import("playwright");

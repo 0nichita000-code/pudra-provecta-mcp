@@ -125,7 +125,7 @@ async function discover(context,item) {
 async function apiJson(url,init={}) {
   const res=await fetch(url,{...init,signal:AbortSignal.timeout(40000)});
   const raw=await res.text();
-  if(!res.ok())throw new Error("Provecta API HTTP "+res.status+" "+raw.slice(0,150));
+  if(!res.ok)throw new Error("Provecta API HTTP "+res.status+" "+raw.slice(0,150));
   return JSON.parse(raw);
 }
 async function getCatalog() {

@@ -1,1 +1,1 @@
-PUDRA PHOTO LOADER dry-run 2 — retry with Provecta login variants. No product mutations.
+PUDRA PHOTO LOADER DRY RUN #3 - network diagnostics only, no product changes.

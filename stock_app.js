@@ -202,6 +202,9 @@ export function createStockApp(deps) {
       if(req.method==="GET"){sendJson(res,200,{document:doc});return true;}
       if(req.method==="DELETE"){
         if(!a.admin){sendJson(res,403,{error:"Удаление разрешено только администратору"});return true;}
+        const minimumAgeMs=5*24*60*60*1000;
+        const ageMs=Date.now()-Date.parse(doc.createdAt);
+        if(!Number.isFinite(ageMs)||ageMs<minimumAgeMs){sendJson(res,409,{error:"Документ хранится минимум 5 суток с момента загрузки. Удаление пока запрещено."});return true;}
         await workflowWrite(db=>{db.documents=db.documents.filter(x=>x.id!==id);});
         sendJson(res,200,{ok:true});return true;
       }

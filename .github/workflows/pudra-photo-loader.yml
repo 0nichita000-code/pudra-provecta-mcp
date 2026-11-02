@@ -25,6 +25,7 @@ jobs:
       PROVECTA_CLIENT_ID: ${{ secrets.PROVECTA_CLIENT_ID }}
       PHOTO_LIVE: 'false'
       PHOTO_BATCH_SIZE: '1'
+      PHOTO_TEST_BARCODE: '6942349733154'
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4

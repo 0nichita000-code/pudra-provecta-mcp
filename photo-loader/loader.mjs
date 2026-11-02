@@ -129,23 +129,43 @@ async function apiJson(url,init={}) {
   return JSON.parse(raw);
 }
 async function getCatalog() {
-  let auth;
-  const url=BASE+"/proxy/api/v1/framework/common/login";
-  const variants=[
-    {headers:{"Content-Type":"application/json"},body:JSON.stringify({username:USER,password:PASS})},
-    {headers:{"Content-Type":"application/x-www-form-urlencoded"},body:new URLSearchParams({username:USER,password:PASS}).toString()}
-  ];
-  for(const v of variants) {
-    try {
-      auth=await apiJson(url,{method:"POST",headers:v.headers,body:v.body});
-      if(auth.token||auth.Token)break;
-    }catch{}
+  // Use the same login variants as the existing working PUDRA Provecta service.
+  // Do not print the credential-bearing URLs or login response.
+  let auth=null;
+  const failures=[];
+  const usernames=[...new Set([USER,USER.toLowerCase()])];
+  for(const username of usernames) {
+    for(const variant of ["json-body","query-plain","query-json-header","form-body"]) {
+      const url=new URL(BASE+"/proxy/api/v1/framework/common/login");
+      const headers={"Accept":"application/json, */*"};
+      const options={method:"POST",headers};
+      if(variant==="json-body"){
+        headers["Content-Type"]="application/json";
+        options.body=JSON.stringify({username,password:PASS});
+      } else if(variant==="form-body"){
+        headers["Content-Type"]="application/x-www-form-urlencoded";
+        options.body=new URLSearchParams({username,password:PASS}).toString();
+      } else {
+        url.searchParams.set("username",username);
+        url.searchParams.set("password",PASS);
+        if(variant==="query-json-header")headers["Content-Type"]="application/json";
+      }
+      try {
+        auth=await apiJson(url.toString(),options);
+        if(auth?.token||auth?.Token)break;
+        failures.push(variant+": missing token");
+      } catch(error) {
+        const status=String(error?.message||error).match(/HTTP\s+(\d+)/)?.[1]||"network";
+        failures.push(variant+": "+status);
+      }
+    }
+    if(auth?.token||auth?.Token)break;
   }
-  if(!auth?.token&&!auth?.Token)throw new Error("No working Provecta API login; check credentials");
+  if(!auth?.token&&!auth?.Token){
+    throw new Error("Provecta API login rejected all known variants; statuses: "+failures.join(", "));
+  }
   const token=auth.token||auth.Token;
-  const clients=auth.clients||auth.Clients||[];
-  const client=process.env.PROVECTA_CLIENT_ID||clients[0]?.Id||clients[0]?.id||clients[0];
-  if(!client)throw new Error("No Provecta client; select correct FAMILYTURCOMPANY client");
+  const client=process.env.PROVECTA_CLIENT_ID||"6231fcee-c92c-f111-8cbf-9c6b0045fe69";
   const result=await apiJson(BASE+"/proxy/api/v1/stock/article/select",{
     headers:{"Authorization":"Bearer "+token,"Client":String(client),"Accept":"application/json"}
   });

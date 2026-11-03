@@ -709,6 +709,7 @@ const alternateByArticle=new Map();
 const provectaWebRead=createProvectaWebRead({origin:new URL(BASE).origin,username:USERNAME,password:PASSWORD,getClient:async()=>(await login(false)).client,readJson:fetchJson});
 function getIndexedBarcodes(id){return [...new Set([...(bulkArticleBarcodes.get(id)||[]),...(bulkBarcodeState.complete?[]:alternateByArticle.get(id)||[])])]}
 function getBulkBarcodeStatus(){return {...bulkBarcodeState}}
+function getBulkBarcodeRecords(){return [...bulkArticleBarcodes].flatMap(([product,codes])=>codes.map(barcode=>({product,barcode})))}
 function startBulkBarcodeSync(){
  if(bulkBarcodeState.running)return;bulkBarcodeState.running=true;
  (async()=>{
@@ -1436,7 +1437,7 @@ const stockApp = createStockApp({
   modernSearchAdditionalBarcode, legacySearchAdditionalBarcode, findIndexedAlternate, startAlternateIndexing, getAlternateIndexStatus
 });
 
-const controlSync=createControlSync({getArticles,getDepots,simpleArticle,simpleDepot,idOf,articleBarcodes,apiGet,asArray,getIndexedBarcodes,getAlternateIndexStatus,startBulkBarcodeSync,getBulkBarcodeStatus});
+const controlSync=createControlSync({getArticles,getDepots,simpleArticle,simpleDepot,idOf,articleBarcodes,apiGet,asArray,getIndexedBarcodes,getAlternateIndexStatus,startBulkBarcodeSync,getBulkBarcodeStatus,getBulkBarcodeRecords});
 const httpServer = createServer(async (req, res) => {
   const url = new URL(req.url || "/", `http://${req.headers.host || "localhost"}`);
 

@@ -113,11 +113,9 @@ export function createStockApp(deps) {
     const resolvedBarcode=verifiedAlternateToPrimary.get(s)||s;
     const {rawArticles,ds}=await catalogs();
 
-    if(!s){
-      const started=Date.now();
-      while(getStockCacheState && !getStockCacheState().ready && Date.now()-started<90000){
-        await new Promise(r=>setTimeout(r,1500));
-      }
+    // Catalog search must not hang while Provecta stock is unavailable.
+    if(!s && getStockCacheState && !getStockCacheState().ready) {
+      refreshStockCache(false).catch(()=>{});
     }
 
     const exact=/^\d{8,14}$/.test(s) || verifiedAlternateToPrimary.has(s);
@@ -266,10 +264,13 @@ export function createStockApp(deps) {
       sendJson(res,202,getAlternateIndexStatus());return true;
     }
     if(req.method==="GET"&&url.pathname==="/stock/api/search"){
-      const products=await search(url.searchParams.get("q")||"",a.admin);sendJson(res,200,{products});return true;
+      const products=await search(url.searchParams.get("q")||"",a.admin);sendJson(res,200,{products,cache:getStockCacheState()});return true;
     }
     if(req.method==="POST"&&url.pathname==="/stock/api/refresh"){
-      await refreshStockCache(true);sendJson(res,200,{ok:true});return true;
+      await refreshStockCache(true);
+      const cache=getStockCacheState();
+      if(!cache.ready){sendJson(res,503,{ok:false,error:"Остатки из Provecta пока не загружены полностью. Повторите позже.",cache});return true;}
+      sendJson(res,200,{ok:true,cache});return true;
     }
     if(req.method==="GET"&&url.pathname==="/stock/api/sales-today"){
       if(!a.admin){sendJson(res,403,{error:"Только администратор"});return true;}

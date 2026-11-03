@@ -217,22 +217,19 @@ async function loadInventory(){
   $("inventoryHome").classList.remove("hidden");
   $("inventoryGroupView").classList.add("hidden");
   try{
-    const d=await api("/stock/api/search?q=");
+    const d=await api("/stock/api/search?q=",{timeoutMs:12000,retries:0});
     S.inventory=d.products||[];
-
-    // Если кэш остатков ещё не успел загрузиться после перезапуска сервера,
-    // не показываем ложные нули — ждём и пробуем ещё раз.
-    const positiveCount=S.inventory.reduce((n,p)=>n+p.stocks.filter(x=>Number(x.quantity)>0).length,0);
-    if(!positiveCount){
-      $("invInfo").textContent="Остатки обновляются с Provecta…";
-      await new Promise(r=>setTimeout(r,5000));
-      const d2=await api("/stock/api/search?q=");
-      S.inventory=d2.products||[];
+    if(d.cache && !d.cache.ready){
+      const loaded=Number(d.cache.readyDepots||0);
+      const count=Array.isArray(d.cache.errors)?d.cache.errors.length:0;
+      $("invInfo").innerHTML='<div class="notice bad">Остатки пока недоступны: загружено складов '+loaded+' из 5.'+(count?' Есть ошибки подключения к Provecta.':'')+' Нулевые остатки не подставляются.</div><button id="invRetry" class="ghost" style="width:100%;margin-top:8px">Повторить загрузку</button>';
+      $("invRetry").addEventListener("click",loadInventory);
+      return;
     }
-
     renderGroupList();
   }catch(e){
-    $("invInfo").innerHTML='<div class="notice bad">'+esc(e.message)+'</div>';
+    $("invInfo").innerHTML='<div class="notice bad">'+esc(e.message)+'</div><button id="invRetry" class="ghost" style="width:100%;margin-top:8px">Повторить загрузку</button>';
+    $("invRetry").addEventListener("click",loadInventory);
   }
 }
 function availableGroups(){
@@ -405,15 +402,15 @@ async function fetchScannedProduct(v){
     const d=await api("/stock/api/search?q="+encodeURIComponent(v),{timeoutMs:3500,retries:0});
     return d.products?.[0]||null;
   }catch(e){
-    if(e?.message==="Сервер не успел ответить.")return null;
+    // Network timeout is not proof that a product does not exist.
     throw e;
   }
 }
 async function refreshScanStocks(v){
-  for(let i=0;i<45;i++){
+  for(let i=0;i<4;i++){
     if(!S.scanLocked||S.lastScanned!==v)return;
     try{
-      const d=await api("/stock/api/search?q="+encodeURIComponent(v));
+      const d=await api("/stock/api/search?q="+encodeURIComponent(v),{timeoutMs:8000,retries:0});
       const p=d.products?.[0];
       if(p && !p.stocks?.some(x=>x.quantity==null)){
         S.product=p;
@@ -422,11 +419,14 @@ async function refreshScanStocks(v){
         msg($("scanInfo"),"Товар найден. Остатки загружены.","ok");
         return;
       }
-    }catch{}
+      if(d.cache && !d.cache.ready && !d.cache.refreshing)break;
+    }catch(e){if(i===3)console.warn("Stock refresh failed:",e.message);}
     await new Promise(r=>setTimeout(r,2000));
   }
+  if(!S.scanLocked||S.lastScanned!==v)return;
   const box=$("scanStocks");
-  if(box)box.innerHTML='<div class="notice bad">Не удалось получить остатки. Нажмите «Обновить остатки».</div><button id="scanRetryStock" class="ghost" style="width:100%;margin-top:8px">Обновить остатки</button>';
+  if(box)box.innerHTML='<div class="notice bad">Provecta не передала остатки. Значения неизвестны, а не равны нулю.</div><button id="scanRetryStock" class="ghost" style="width:100%;margin-top:8px">Повторить загрузку</button>';
+  msg($("scanInfo"),"Товар найден, но остатки недоступны.","bad");
   if($("scanRetryStock"))$("scanRetryStock").addEventListener("click",()=>refreshScanStocks(v));
 }
 async function handleScannedCode(v){

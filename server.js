@@ -1154,7 +1154,8 @@ function createMcpServer() {
       items,
       source: "pudra-stock-cache",
       stockCacheAgeMs: Date.now() - stockCache.at,
-      readyDepots: stockCache.readyDepots?.size || 0
+      readyDepots: stockCache.readyDepots?.size || 0,
+      cacheStatus: getStockCacheState()
     });
   });
 

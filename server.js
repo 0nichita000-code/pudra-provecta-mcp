@@ -717,8 +717,8 @@ function startBulkBarcodeSync(){
    for(let page=1;page<=1000;page++){
     const unwrap=raw=>raw?.ArticleBarcodeSearchResult??raw?.d?.ArticleBarcodeSearchResult??raw?.d??raw;
     const list=payload=>Array.isArray(payload)?payload:Array.isArray(payload?.Entities)?payload.Entities:payload?.Entities?.ArticleBarcode;
-    let payload=unwrap(await provectaWebRead('ArticleBarcodeSearch',{articlePredicate:{Pager:{Number:page,Size:1000}}}));
-    if(!Array.isArray(list(payload)))payload=unwrap(await provectaWebRead('ArticleBarcodeSearch',{articleBarcodePredicate:{Pager:{Number:page,Size:1000}}}));
+    const client=(await login(false)).client;
+    const payload=unwrap(await provectaWebRead('ArticleBarcodeSearch',{articleBarcodePredicate:{Pager:{Number:page,Size:1000},ArticlePredicate:{OrganisationPredicate:{Organisations:{Value:[{Id:client}]}}}}}));
     const entities=list(payload);
     if(!Array.isArray(entities))throw Error('Provecta did not return the additional-barcode list');
     const reported=payload?.Pager?.Count;total=reported===null||reported===undefined?null:Number(reported);

@@ -32,8 +32,9 @@ async function fetchJson(url, options = {}, retries = 2) {
   for (let i = 0; i <= retries; i++) {
     try {
       const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 45000);
-      const r = await fetch(url, { ...options, signal: controller.signal });
+      const { timeoutMs = 45000, ...requestOptions } = options;
+      const timeout = setTimeout(() => controller.abort(), timeoutMs);
+      const r = await fetch(url, { ...requestOptions, signal: controller.signal });
       clearTimeout(timeout);
       const text = await r.text();
       let data = text;
@@ -639,14 +640,16 @@ async function apiGet(path, params = {}, retryAuth = true) {
     else u.searchParams.set(key, String(value));
   }
   try {
+    const balanceRequest = path === "/v1/resume/currentBalance";
     return await fetchJson(u.toString(), {
       method: "GET",
+      timeoutMs: balanceRequest ? 90000 : 45000,
       headers: {
         "Accept": "application/json",
         "Authorization": `Bearer ${a.token}`,
         "Client": a.client
       }
-    }, 1);
+    }, balanceRequest ? 0 : 1);
   } catch (e) {
     if (retryAuth && (e.status === 401 || e.status === 403)) {
       authCache = { token: "", client: "", expiresAt: 0 };
@@ -802,44 +805,54 @@ async function refreshStockCache(force = false) {
     const allowed = new Set(["PUDRA ORHEI","PUDRA GLODENI","PUDRA BALTI","PUDRA BALTI PINK","DEPOZIT RISCANI"]);
     const depots = (await getDepots(false)).map(simpleDepot).filter(d => d.id && allowed.has(String(d.name||"").toUpperCase().trim()));
     if (!depots.length) throw Error("No PUDRA depots returned by Provecta");
-    const results = await Promise.allSettled(depots.map(async d => {
-      const raw=await apiGet("/v1/resume/currentBalance",{depotId:[d.id]});
-      if (raw == null) throw Error("Empty stock response for "+d.name);
-      const rows=asArray(raw);
-      if (!Array.isArray(rows) || rows.length === 0) throw Error("No stock records for "+d.name);
-      const parsed=[];
-      for(const row of rows){
-        const id=idOf(row.Article??row.article??row.ArticleId??row.articleId);
-        const q=Number(row.BalanceQuantitySum??row.balanceQuantitySum);
-        if(id && Number.isFinite(q))parsed.push({id,quantity:q});
-      }
-      if (!parsed.length) throw Error("No valid stock records for "+d.name);
-      return {depot:d,parsed};
-    }));
-    const errors=[];
-    for(let i=0;i<results.length;i++){
-      const x=results[i],d=depots[i];
-      if(x.status!=="fulfilled"){errors.push(d.name+": "+String(x.reason?.message||x.reason));continue;}
-      for(const [id,xs] of stockCache.byArticle){
-        const kept=xs.filter(z=>z.id!==d.id);
-        if(kept.length)stockCache.byArticle.set(id,kept);
-        else stockCache.byArticle.delete(id);
-      }
-      for(const row of x.value.parsed){
-        if(!stockCache.byArticle.has(row.id))stockCache.byArticle.set(row.id,[]);
-        stockCache.byArticle.get(row.id).push({id:d.id,name:d.name,quantity:row.quantity});
-      }
-      stockCache.readyDepots.add(d.id);
-      console.log("Stock depot ready:",d.name,"records",x.value.parsed.length);
+    const errors = [];
+    // Fewer simultaneous heavy balance queries protect the upstream API.
+    // Commit each depot as soon as it succeeds; another depot must not block it.
+    for (let offset = 0; offset < depots.length; offset += 2) {
+      const batch = depots.slice(offset, offset + 2);
+      await Promise.all(batch.map(async d => {
+        const started = Date.now();
+        try {
+          const raw = await apiGet("/v1/resume/currentBalance", {depotId:[d.id]});
+          if (raw == null) throw Error("Empty stock response");
+          const rows = asArray(raw);
+          if (!Array.isArray(rows) || rows.length === 0) throw Error("No stock records");
+          const parsed = [];
+          for (const row of rows) {
+            const id = idOf(row.Article??row.article??row.ArticleId??row.articleId);
+            const q = Number(row.BalanceQuantitySum??row.balanceQuantitySum);
+            if (id && Number.isFinite(q)) parsed.push({id,quantity:q});
+          }
+          if (!parsed.length) throw Error("No valid stock records");
+          for (const [id,xs] of stockCache.byArticle) {
+            const kept = xs.filter(z=>z.id!==d.id);
+            if (kept.length) stockCache.byArticle.set(id,kept);
+            else stockCache.byArticle.delete(id);
+          }
+          for (const row of parsed) {
+            if (!stockCache.byArticle.has(row.id)) stockCache.byArticle.set(row.id,[]);
+            stockCache.byArticle.get(row.id).push({id:d.id,name:d.name,quantity:row.quantity});
+          }
+          stockCache.readyDepots.add(d.id);
+          console.log("Stock depot ready:", d.name, "records", parsed.length, "in", Date.now()-started, "ms");
+        } catch (e) {
+          errors.push(d.name+": "+String(e?.message||e));
+          console.warn("Stock depot failed:", d.name, "after", Date.now()-started, "ms");
+        }
+      }));
     }
     stockCache.ready = depots.every(d=>stockCache.readyDepots.has(d.id));
     stockCache.lastErrors=errors;
-    if (!errors.length){stockCache.at=Date.now();stockCache.lastSuccessAt=stockCache.at;}
-    if(errors.length)console.error("Stock cache incomplete:",errors.join("; "));
-    else console.log("Stock cache verified:",stockCache.byArticle.size,"products in",depots.length,"depots");
-  } catch(e){
-    stockCache.ready=false;
-    stockCache.lastErrors=[String(e?.message||e)];
+    if (!errors.length && stockCache.ready) {
+      stockCache.at=Date.now();
+      stockCache.lastSuccessAt=stockCache.at;
+      console.log("Stock cache verified:",stockCache.byArticle.size,"products in",depots.length,"depots");
+    } else {
+      console.error("Stock cache incomplete:",errors.join("; "));
+    }
+  } catch(e) {
+    stockCache.ready = false;
+    stockCache.lastErrors = [String(e?.message||e)];
     console.error("Stock cache refresh failed",e?.message||e);
   } finally {stockCache.refreshing=false;}
 }

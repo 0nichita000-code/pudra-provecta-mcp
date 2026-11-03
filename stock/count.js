@@ -101,7 +101,7 @@ async function upload(){
    const missing=[n<0?"НАИМЕНОВАНИЕ":null,b<0?"ШТРИХКОД":null,q<0?"КОЛИЧЕСТВО":null].filter(Boolean);
    throw Error("Не распознаны колонки: "+missing.join(", ")+". В файле: "+rawHdr.filter(Boolean).slice(0,12).join(", "));
  }
- const map=new Map();for(const row of arr){const code=String(row[b]||"").trim();if(!code)continue;const amount=Number(String(row[q]||"").trim().replace(",","."));if(!Number.isFinite(amount)||amount<0)throw Error("Некорректное количество: "+code);const prev=map.get(code);if(prev)prev.expected+=amount;else map.set(code,{name:row[n]||"",barcode:code,expected:amount})}
+ const map=new Map();for(const row of arr){const code=String(row[b]||"").trim();if(!code)continue;const amount=Number(String(row[q]||"").trim().replace(",","."));if(!Number.isFinite(amount)||Math.abs(amount)>1e7)throw Error("Некорректное количество: "+code);const prev=map.get(code);if(prev)prev.expected+=amount;else map.set(code,{name:row[n]||"",barcode:code,expected:amount})}
  const items=[...map.values()];if(!items.length)throw Error("Нет товаров с штрихкодами");
  const d=await request("/stock/api/count-documents","POST",{title:$("countDocName").value.trim()||(file?file.name:"Документ из таблицы"),depotId:$("countUploadDepot").value,type:$("countDocType").value,receiptDate:$("countReceiptDate").value,items});
  $("countUploadInfo").textContent="Готово: загружено "+items.length+" позиций. Документ №"+d.id;

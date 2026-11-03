@@ -87,10 +87,20 @@ async function upload(){
    arr=window.XLSX.utils.sheet_to_json(sheet,{header:1,defval:"",raw:true}).map(row=>row.map(v=>String(v??"")));
  }else{arr=tableCSV(await file.text());}
  if(!arr.length)throw Error("Файл пуст.");
- const hdr=arr.shift().map(s=>s.trim().toLowerCase());
- const find=terms=>hdr.findIndex(s=>terms.some(t=>s.includes(t)));
- const n=find(["назван","name","denum"]),b=find(["штрих","barcode","cod de bare"]),q=find(["колич","quantity","cantitat"]);
- if(n<0||b<0||q<0)throw Error("Нужны столбцы НАЗВАНИЕ, ШТРИХКОД, КОЛИЧЕСТВО");
+ // Different Excel exports use "Наименование", "Название" or "Denumire".
+ // Ignore spaces and punctuation in headers ("Штрих-код" == "ШТРИХКОД").
+ const normalizeHeader=s=>String(s??"").normalize("NFKC").trim().toLowerCase()
+   .replace(/ё/g,"е").replace(/[\s\-_.:()№/]+/g,"");
+ const rawHdr=arr.shift().map(s=>String(s??"").trim());
+ const hdr=rawHdr.map(normalizeHeader);
+ const find=terms=>hdr.findIndex(s=>terms.some(t=>s.includes(normalizeHeader(t))));
+ const n=find(["наименование","название","назван","номенклатура","товар","name","denumire","denum"]),
+       b=find(["штрихкод","штрих","barcode","ean","cod de bare"]),
+       q=find(["количество","колич","кол-во","кол во","к-во","кво","quantity","cantitate","cantitat","qty"]);
+ if(n<0||b<0||q<0){
+   const missing=[n<0?"НАИМЕНОВАНИЕ":null,b<0?"ШТРИХКОД":null,q<0?"КОЛИЧЕСТВО":null].filter(Boolean);
+   throw Error("Не распознаны колонки: "+missing.join(", ")+". В файле: "+rawHdr.filter(Boolean).slice(0,12).join(", "));
+ }
  const map=new Map();for(const row of arr){const code=String(row[b]||"").trim();if(!code)continue;const amount=Number(String(row[q]||"").trim().replace(",","."));if(!Number.isFinite(amount)||amount<0)throw Error("Некорректное количество: "+code);const prev=map.get(code);if(prev)prev.expected+=amount;else map.set(code,{name:row[n]||"",barcode:code,expected:amount})}
  const items=[...map.values()];if(!items.length)throw Error("Нет товаров с штрихкодами");
  const d=await request("/stock/api/count-documents","POST",{title:$("countDocName").value.trim()||(file?file.name:"Документ из таблицы"),depotId:$("countUploadDepot").value,type:$("countDocType").value,receiptDate:$("countReceiptDate").value,items});

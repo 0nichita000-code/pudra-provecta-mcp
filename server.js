@@ -4,6 +4,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { z } from "zod";
 import { createStockApp } from "./stock_app.js";
+import { createControlSync } from "./control_sync.js";
 
 const MCP_PATH = "/mcp";
 const PORT = Number(process.env.PORT || 8080);
@@ -700,6 +701,26 @@ let alternateIndexRunning = false;
 let alternateErrors = 0;
 let alternatePasses = 0;
 let alternateLastCompleted = null;
+let bulkBarcodeState={running:false,complete:false,lastSuccessAt:null,count:0,lastError:null};
+const bulkArticleBarcodes=new Map();
+const alternateByArticle=new Map();
+function getIndexedBarcodes(id){return [...new Set([...(bulkArticleBarcodes.get(id)||[]),...(alternateByArticle.get(id)||[])])]}
+function getBulkBarcodeStatus(){return {...bulkBarcodeState}}
+function startBulkBarcodeSync(){
+ if(bulkBarcodeState.running)return;bulkBarcodeState.running=true;
+ (async()=>{
+  try{
+   const result=await legacyPost('ArticleBarcodeSearch',{articleBarcodePredicate:{Pager:{Number:1,Size:32767}}});
+   const raw=result?.data;const payload=raw?.ArticleBarcodeSearchResult??raw?.d?.ArticleBarcodeSearchResult??raw?.d??raw;
+   const entities=Array.isArray(payload)?payload:Array.isArray(payload?.Entities)?payload.Entities:payload?.Entities?.ArticleBarcode;
+   if(!Array.isArray(entities))throw Error('Provecta did not return the additional-barcode list');
+   const next=new Map();for(const row of entities){const id=idOf(row.Article??row.article),code=String(row.Value??row.value??'').trim();if(!id||!code)throw Error('Incomplete additional-barcode record');if(!next.has(id))next.set(id,[]);next.get(id).push(code)}
+   const total=Number(payload?.Pager?.Count);const complete=Number.isSafeInteger(total)&&total>=0&&total===entities.length;
+   if(complete)bulkArticleBarcodes.clear();for(const [id,codes]of next)bulkArticleBarcodes.set(id,[...new Set([...(complete?[]:bulkArticleBarcodes.get(id)||[]),...codes])]);
+   bulkBarcodeState={running:true,complete,lastSuccessAt:new Date().toISOString(),count:entities.length,lastError:complete?null:'The upstream response does not confirm that every page was returned'};
+  }catch(e){bulkBarcodeState.lastError=String(e.message||e).slice(0,200);bulkBarcodeState.complete=false}
+ })().finally(()=>{bulkBarcodeState.running=false});
+}
 function indexLoadedBarcodes(payload, canonicalId, depth = 0) {
   if (payload == null || depth > 10) return 0;
   if (Array.isArray(payload)) return payload.reduce((n,x)=>n+indexLoadedBarcodes(x,canonicalId,depth+1),0);
@@ -708,7 +729,7 @@ function indexLoadedBarcodes(payload, canonicalId, depth = 0) {
   if (payload.ArticleBarcodes || payload.articleBarcodes) {
     for (const bc of articleBarcodes(payload)) {
       const owner=alternateIndex.get(bc);
-      if (!owner) {alternateIndex.set(bc,canonicalId);n++;}
+      if (!owner) {alternateIndex.set(bc,canonicalId);if(!alternateByArticle.has(canonicalId))alternateByArticle.set(canonicalId,new Set());alternateByArticle.get(canonicalId).add(bc);n++;}
       else if(owner!==canonicalId) console.warn("ALT_BARCODE_COLLISION",bc,owner,canonicalId);
     }
   }
@@ -1402,8 +1423,11 @@ const stockApp = createStockApp({
   modernSearchAdditionalBarcode, legacySearchAdditionalBarcode, findIndexedAlternate, startAlternateIndexing, getAlternateIndexStatus
 });
 
+const controlSync=createControlSync({getArticles,getDepots,simpleArticle,simpleDepot,idOf,articleBarcodes,apiGet,asArray,getIndexedBarcodes,getAlternateIndexStatus,startBulkBarcodeSync,getBulkBarcodeStatus});
 const httpServer = createServer(async (req, res) => {
   const url = new URL(req.url || "/", `http://${req.headers.host || "localhost"}`);
+
+  if (await controlSync(req,res,url)) return;
 
   if (await stockApp(req, res, url)) return;
 

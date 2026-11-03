@@ -14,7 +14,7 @@ export function createControlSync({getArticles,getDepots,simpleArticle,simpleDep
    const products=raw.map(a=>{const p=simpleArticle(a),id=idOf(a);if(!id||seen.has(id))throw Error('Missing/duplicate article identity');seen.add(id);return {...p,id,additionalBarcodes:[...new Set([...articleBarcodes(a),...getIndexedBarcodes(id)])],sourceUpdatedAt:a.UpdatedOn??a.updatedOn??null,deletedAt:a.DeletedOn??a.deletedOn??null,description:a.Description??'',raw:a}});
    const stockStatus=[];const balances=[];
    const publish=()=>{
-    const versionProducts=products.map(p=>({...p,additionalBarcodes:[...new Set([...p.additionalBarcodes,...getIndexedBarcodes(p.id)])]}));
+    const versionProducts=products.map(p=>({...p,additionalBarcodes:[...new Set([...p.additionalBarcodes,...getIndexedBarcodes(p.id)])].filter(code=>code!==String(p.barcode??'').trim())}));
     const known=new Map(stockStatus.map(x=>[x.depot,x]));
     const snapshot={id:randomUUID(),at:new Date().toISOString(),products:versionProducts,depots,balances:[...balances],stockStatus:depots.map(d=>known.get(d.id)||{depot:d.id,complete:false,error:'Ожидается ответ Provecta',at:null}),alternate:{...getAlternateIndexStatus(),bulk:getBulkBarcodeStatus()},catalogComplete:true,unknownBalanceProducts:[...new Set(balances.filter(x=>!seen.has(x.product)).map(x=>x.product))]};
     latest=snapshot;generations.set(snapshot.id,snapshot);for(const id of generations.keys())if(generations.size>8)generations.delete(id);

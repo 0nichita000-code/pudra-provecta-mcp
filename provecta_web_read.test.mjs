@@ -1,0 +1,5 @@
+import {test} from 'node:test';import assert from 'node:assert/strict';import {createProvectaWebRead} from './provecta_web_read.js';
+test('first-party web headers, organization selection and read-only allowlist',async()=>{
+ const calls=[];const read=createProvectaWebRead({origin:'https://example.invalid',username:'test',password:'not-real',getClient:async()=>'client',readJson:async(url,options)=>{calls.push({url,options});if(url.endsWith('/Login'))return {Code:'login-test'};if(url.endsWith('/Authentication'))return {Code:'org-test'};return {Entities:[],Pager:{Count:0}}}});
+ await read('ArticleBarcodeSearch',{articlePredicate:{}});assert.equal(calls.length,3);assert.equal(calls[0].options.headers.ApplicationCode,'ProvectaPOS.Server.Iis');assert.equal(calls[0].options.headers.EmplacementCode,'ProvectaPOS.Central');assert.equal(calls[1].options.headers.TokenCode,'login-test');assert.deepEqual(JSON.parse(calls[1].options.body),{organisation:{Id:'client'}});assert.equal(calls[2].options.headers.TokenCode,'org-test');await read('ArticleLoad',{});assert.equal(calls.length,4);await assert.rejects(()=>read('ArticleSave',{}),/not permitted/);
+});

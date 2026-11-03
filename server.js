@@ -5,6 +5,7 @@ import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/
 import { z } from "zod";
 import { createStockApp } from "./stock_app.js";
 import { createControlSync } from "./control_sync.js";
+import { createProvectaWebRead } from "./provecta_web_read.js";
 
 const MCP_PATH = "/mcp";
 const PORT = Number(process.env.PORT || 8080);
@@ -703,21 +704,32 @@ let alternatePasses = 0;
 let alternateLastCompleted = null;
 let bulkBarcodeState={running:false,complete:false,lastSuccessAt:null,count:0,lastError:null};
 const bulkArticleBarcodes=new Map();
+const bulkBarcodeOwners=new Map();
 const alternateByArticle=new Map();
-function getIndexedBarcodes(id){return [...new Set([...(bulkArticleBarcodes.get(id)||[]),...(alternateByArticle.get(id)||[])])]}
+const provectaWebRead=createProvectaWebRead({origin:new URL(BASE).origin,username:USERNAME,password:PASSWORD,getClient:async()=>(await login(false)).client,readJson:fetchJson});
+function getIndexedBarcodes(id){return [...new Set([...(bulkArticleBarcodes.get(id)||[]),...(bulkBarcodeState.complete?[]:alternateByArticle.get(id)||[])])]}
 function getBulkBarcodeStatus(){return {...bulkBarcodeState}}
 function startBulkBarcodeSync(){
  if(bulkBarcodeState.running)return;bulkBarcodeState.running=true;
  (async()=>{
   try{
-   const result=await legacyPost('ArticleBarcodeSearch',{articleBarcodePredicate:{Pager:{Number:1,Size:32767}}});
-   const raw=result?.data;const payload=raw?.ArticleBarcodeSearchResult??raw?.d?.ArticleBarcodeSearchResult??raw?.d??raw;
-   const entities=Array.isArray(payload)?payload:Array.isArray(payload?.Entities)?payload.Entities:payload?.Entities?.ArticleBarcode;
-   if(!Array.isArray(entities))throw Error('Provecta did not return the additional-barcode list');
-   const next=new Map();for(const row of entities){const id=idOf(row.Article??row.article),code=String(row.Value??row.value??'').trim();if(!id||!code)throw Error('Incomplete additional-barcode record');if(!next.has(id))next.set(id,[]);next.get(id).push(code)}
-   const total=Number(payload?.Pager?.Count);const complete=Number.isSafeInteger(total)&&total>=0&&total===entities.length;
+   const all=[],seen=new Set();let total=null,complete=false;
+   for(let page=1;page<=1000;page++){
+    const unwrap=raw=>raw?.ArticleBarcodeSearchResult??raw?.d?.ArticleBarcodeSearchResult??raw?.d??raw;
+    const list=payload=>Array.isArray(payload)?payload:Array.isArray(payload?.Entities)?payload.Entities:payload?.Entities?.ArticleBarcode;
+    let payload=unwrap(await provectaWebRead('ArticleBarcodeSearch',{articlePredicate:{Pager:{Number:page,Size:1000}}}));
+    if(!Array.isArray(list(payload)))payload=unwrap(await provectaWebRead('ArticleBarcodeSearch',{articleBarcodePredicate:{Pager:{Number:page,Size:1000}}}));
+    const entities=list(payload);
+    if(!Array.isArray(entities))throw Error('Provecta did not return the additional-barcode list');
+    const reported=payload?.Pager?.Count;total=reported===null||reported===undefined?null:Number(reported);
+    let added=0;for(const row of entities){const id=idOf(row.Article??row.article),code=String(row.Value??row.value??'').trim();if(!id||!code)throw Error('Incomplete additional-barcode record');const key=id+'|'+code;if(!seen.has(key)){seen.add(key);all.push({id,code});added++}}
+    if(Number.isSafeInteger(total)&&total>=0&&all.length===total){complete=true;break}
+    if(!added||!entities.length||total===null)break;
+   }
+   const next=new Map();for(const {id,code}of all){if(!next.has(id))next.set(id,[]);next.get(id).push(code)}
    if(complete)bulkArticleBarcodes.clear();for(const [id,codes]of next)bulkArticleBarcodes.set(id,[...new Set([...(complete?[]:bulkArticleBarcodes.get(id)||[]),...codes])]);
-   bulkBarcodeState={running:true,complete,lastSuccessAt:new Date().toISOString(),count:entities.length,lastError:complete?null:'The upstream response does not confirm that every page was returned'};
+   if(complete)bulkBarcodeOwners.clear();for(const {id,code}of all)if(!bulkBarcodeOwners.has(code))bulkBarcodeOwners.set(code,id);
+   bulkBarcodeState={running:true,complete,lastSuccessAt:new Date().toISOString(),count:all.length,total,lastError:complete?null:'The upstream response does not confirm that every page was returned'};
   }catch(e){bulkBarcodeState.lastError=String(e.message||e).slice(0,200);bulkBarcodeState.complete=false}
  })().finally(()=>{bulkBarcodeState.running=false});
 }
@@ -797,7 +809,8 @@ function startAlternateIndexing() {
   });
 }
 function findIndexedAlternate(barcode) {
-  const id=alternateIndex.get(String(barcode).trim());
+  const code=String(barcode).trim();
+  const id=bulkBarcodeOwners.get(code)||(bulkBarcodeState.complete?null:alternateIndex.get(code));
   return id ? articleCache.byId.get(id)||null : null;
 }
 

@@ -1558,10 +1558,37 @@ const httpServer = createServer(async (req, res) => {
   res.writeHead(404).end("Not Found");
 });
 
+async function probeNarrowStockQuery() {
+  // One-time, read-only diagnostic. Never print credentials or product values.
+  try {
+    const [articles,depots] = await Promise.all([getArticles(false), getDepots(false)]);
+    const d=depots.map(simpleDepot).find(x=>x.name==="PUDRA GLODENI");
+    const articleId=idOf(articles[0]);
+    if(!d || !articleId) return;
+    const credentials=await login(false);
+    const tests=[
+      {path:"/v1/resume/currentBalance",params:{depotId:d.id,articleId}},
+      {path:"/v1/stock/lot/select",params:{lotArticleId:articleId}}
+    ];
+    for(const t of tests) {
+      const u=new URL(BASE+t.path);
+      for(const [k,v] of Object.entries(t.params))u.searchParams.set(k,String(v));
+      const started=Date.now();
+      try{
+        const r=await fetch(u,{headers:{"Accept":"application/json","Authorization":"Bearer "+credentials.token,"Client":credentials.client},signal:AbortSignal.timeout(12000)});
+        const contentType=r.headers.get("content-type")||"";
+        if(!r.ok) {console.warn("STOCK_PROBE",t.path,"status",r.status,"ms",Date.now()-started);continue;}
+        const d=contentType.includes("json")?await r.json():null;
+        console.info("STOCK_PROBE",t.path,"status",r.status,"ms",Date.now()-started,"rows",asArray(d).length,"topKeys",Object.keys(d||{}).slice(0,8).join(","));
+      }catch(e){console.warn("STOCK_PROBE",t.path,"timeout_or_error",String(e.name||"Error"),"ms",Date.now()-started);}
+    }
+  }catch(e){console.warn("STOCK_PROBE_INIT_FAILED",String(e.message||e).slice(0,120));}
+}
+
 httpServer.listen(PORT, "0.0.0.0", () => {
   console.log(`PUDRA Provecta MCP listening on :${PORT}${MCP_PATH}`);
   Promise.all([getArticles(false), getDepots(false)])
-    .then(() => refreshStockCache(true))
+    .then(() => {void probeNarrowStockQuery();return refreshStockCache(true);})
     .catch(e => console.error("Warm-up failed", e?.message || e));
   setInterval(() => refreshStockCache(false).catch(() => {}), 2 * 60 * 1000).unref();
 });

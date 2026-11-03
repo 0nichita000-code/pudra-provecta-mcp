@@ -13,6 +13,13 @@ export function createControlSync({getArticles,getDepots,simpleArticle,simpleDep
    if(!depots.length)throw Error('Provecta returned no depots');
    const products=raw.map(a=>{const p=simpleArticle(a),id=idOf(a);if(!id||seen.has(id))throw Error('Missing/duplicate article identity');seen.add(id);return {...p,id,additionalBarcodes:[...new Set([...articleBarcodes(a),...getIndexedBarcodes(id)])],sourceUpdatedAt:a.UpdatedOn??a.updatedOn??null,deletedAt:a.DeletedOn??a.deletedOn??null,description:a.Description??'',raw:a}});
    const stockStatus=[];const balances=[];
+   const publish=()=>{
+    const versionProducts=products.map(p=>({...p,additionalBarcodes:[...new Set([...p.additionalBarcodes,...getIndexedBarcodes(p.id)])]}));
+    const known=new Map(stockStatus.map(x=>[x.depot,x]));
+    const snapshot={id:randomUUID(),at:new Date().toISOString(),products:versionProducts,depots,balances:[...balances],stockStatus:depots.map(d=>known.get(d.id)||{depot:d.id,complete:false,error:'Ожидается ответ Provecta',at:null}),alternate:{...getAlternateIndexStatus(),bulk:getBulkBarcodeStatus()},catalogComplete:true,unknownBalanceProducts:[...new Set(balances.filter(x=>!seen.has(x.product)).map(x=>x.product))]};
+    latest=snapshot;generations.set(snapshot.id,snapshot);for(const id of generations.keys())if(generations.size>8)generations.delete(id);
+   };
+   startBulkBarcodeSync();publish();
    for(let offset=0;offset<depots.length;offset+=2){await Promise.all(depots.slice(offset,offset+2).map(async d=>{
     try{
      const value=await apiGet('/v1/resume/currentBalance',{depotId:[d.id]});
@@ -21,11 +28,7 @@ export function createControlSync({getArticles,getDepots,simpleArticle,simpleDep
      const aggregate=new Map();for(const row of rows){const product=idOf(row.Article??row.article??row.ArticleId??row.articleId),quantity=Number(row.BalanceQuantitySum??row.balanceQuantitySum);if(!product||!Number.isFinite(quantity))throw Error('Invalid balance row');aggregate.set(product,(aggregate.get(product)||0)+quantity)}
      const at=new Date().toISOString();for(const [product,quantity]of aggregate)balances.push({product,depot:d.id,quantity});stockStatus.push({depot:d.id,complete:true,rows:aggregate.size,at});
     }catch(e){stockStatus.push({depot:d.id,complete:false,error:String(e.message||e).slice(0,200),at:null})}
-   }))}
-   for(const p of products)p.additionalBarcodes=[...new Set([...p.additionalBarcodes,...getIndexedBarcodes(p.id)])];
-   startBulkBarcodeSync();
-   const snapshot={id:randomUUID(),at:new Date().toISOString(),products,depots,balances,stockStatus,alternate:{...getAlternateIndexStatus(),bulk:getBulkBarcodeStatus()},catalogComplete:true,unknownBalanceProducts:[...new Set(balances.filter(x=>!seen.has(x.product)).map(x=>x.product))]};
-   latest=snapshot;generations.set(snapshot.id,snapshot);for(const [id,s]of generations)if(generations.size>3&&id!==snapshot.id)generations.delete(id);
+   }));publish()}
   }catch(e){lastError=String(e.message||e).slice(0,250)}finally{running=false}
  }
  return async(req,res,url)=>{
@@ -40,7 +43,8 @@ export function createControlSync({getArticles,getDepots,simpleArticle,simpleDep
   if(generation){const s=generations.get(generation);if(!s){send(409,{error:'Snapshot expired; restart download'});return true}
    const offset=Number(url.searchParams.get('offset')||0);if(!Number.isSafeInteger(offset)||offset<0){send(400,{error:'Invalid offset'});return true}
    const products=s.products.slice(offset,offset+500);const ids=new Set(products.map(p=>p.id));
-   send(200,{schema:1,id:s.id,at:s.at,offset,nextOffset:offset+products.length,total:s.products.length,catalogComplete:s.catalogComplete,products,balances:s.balances.filter(x=>ids.has(x.product)),depots:s.depots,stockStatus:s.stockStatus,alternate:s.alternate,unknownBalanceProducts:s.unknownBalanceProducts});
+   const unknown=new Set(s.unknownBalanceProducts);
+   send(200,{schema:1,id:s.id,at:s.at,offset,nextOffset:offset+products.length,total:s.products.length,catalogComplete:s.catalogComplete,products,balances:s.balances.filter(x=>ids.has(x.product)||(offset===0&&unknown.has(x.product))),depots:s.depots,stockStatus:s.stockStatus,alternate:s.alternate,unknownBalanceProducts:s.unknownBalanceProducts});
   }else send(200,status());return true;
  };
 }

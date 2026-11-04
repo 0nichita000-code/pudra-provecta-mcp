@@ -60,7 +60,7 @@ async function refresh(){
  $("countDocs").querySelectorAll(".countDelete").forEach(el=>el.onclick=async()=>{
    const doc=items.find(x=>x.id===el.dataset.id);
    const title=doc?.title||"документ";
-   if(!confirm("Удалить «"+title+"»?\\n\\nБудут удалены все позиции и результаты проверки в PUDRA STOCK. Действие необратимо.\\n\\nПродолжить?"))return;
+   if(!confirm("Удалить «"+title+"»?\n\nБудут удалены все позиции и результаты проверки в PUDRA STOCK. Действие необратимо.\n\nПродолжить?"))return;
    el.disabled=true;
    try{
      await request("/stock/api/count-documents/"+el.dataset.id+"?depotId="+encodeURIComponent(depot()),"DELETE");

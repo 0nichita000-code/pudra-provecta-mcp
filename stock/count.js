@@ -142,6 +142,8 @@ async function camera(){
   scanner.setHandler(code=>{
    const scanned=String(code||"").trim();
    if(!scanned||!current)return;
+   // Ignore website QR codes printed next to real product barcodes.
+   if(/^(?:https?:\/\/|www\.)/i.test(scanned))return;
    const now=Date.now();if(scanned===lastCountScan&&now-lastCountScanAt<1400)return;
    lastCountScan=scanned;lastCountScanAt=now;
    const found=current.items.some(x=>x.barcode===scanned);

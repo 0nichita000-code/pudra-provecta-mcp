@@ -15,7 +15,7 @@ export function createProvectaWebRead({origin,username,password,getClient,readJs
   })().finally(()=>authenticating=null);return authenticating;
  }
  return async(method,body)=>{
-  if(!['ArticleBarcodeSearch','ArticleSearch','ArticleLoad','ArticleGroupSearch','PricelistSearch','PricelistItemSearch','GiftcardSearch'].includes(method))throw Error('Read operation not permitted');
+  if(!['ArticleBarcodeSearch','ArticleSearch','ArticleLoad','ArticleGroupSearch','PricelistSearch','PricelistItemSearch','GiftcardSearch','DocumentResumeSearch'].includes(method))throw Error('Read operation not permitted');
   const code=await authenticate();return post('Stock.svc/Web/'+method,body,code);
  };
 }

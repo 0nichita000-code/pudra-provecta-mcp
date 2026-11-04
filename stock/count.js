@@ -2,6 +2,8 @@
 "use strict";
 const $=id=>document.getElementById(id), BASE="https://pudra-provecta-mcp.onrender.com";
 let current=null, stream=null, scanLoop=null, busy=false, zxingReader=null, zxingControls=null;
+const countAliasCache=new Map();
+let countScanMatching=false, countManualLookupTimer=null;
 const escape=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 function profile(){try{const x=JSON.parse(localStorage.getItem("pudraStockLogin")||"{}");if(x.role==="staff")x.pin=sessionStorage.getItem("pudraStoreSession")||"";return x}catch{return {}}}
 function depot(){return $("myDepot").value}
@@ -51,7 +53,7 @@ async function initialize(){
 }
 async function refresh(){
  if(!depot())return;
- current=null;$("countEditor").classList.add("hidden");$("countDocs").classList.remove("hidden");msg("Загружаю документы…");
+ current=null;countAliasCache.clear();$("countEditor").classList.add("hidden");$("countDocs").classList.remove("hidden");msg("Загружаю документы…");
  try{const data=await request("/stock/api/count-documents?depotId="+encodeURIComponent(depot()));
  const items=data.items.filter(x=>x.depotId===depot());
  msg(items.length?"Документов магазина: "+items.length:"Документов для этого магазина пока нет.");
@@ -70,7 +72,7 @@ async function refresh(){
  }catch(e){msg("Ошибка загрузки: "+e.message)}
 }
 async function open(id){
- try{const v=await request("/stock/api/count-documents/"+id+"?depotId="+encodeURIComponent(depot()));current=v.document;
+ try{const v=await request("/stock/api/count-documents/"+id+"?depotId="+encodeURIComponent(depot()));current=v.document;countAliasCache.clear();
  $("countTitle").textContent=current.title;$("countFind").value="";
  $("countDocs").classList.add("hidden");$("countEditor").classList.remove("hidden");render();
  }catch(e){alert(e.message)}
@@ -83,6 +85,32 @@ function render(){
  $("countLines").innerHTML='<p class="muted">Проверено '+completed+' из '+current.items.length+'. Не проверено ≠ ноль.</p>'+matched.map(({x,i})=>'<div class="card" style="padding:12px;margin:8px 0"><strong>'+escape(x.name)+'</strong><div class="muted">'+escape(x.barcode)+'</div><div>Должно быть: <strong>'+x.expected+'</strong> · Факт: <strong>'+(x.actual===null?"не проверено":x.actual)+'</strong></div><div class="row"><input class="countQty" data-i="'+i+'" type="number" min="0" step="1" value="'+(x.actual===null?"":x.actual)+'" placeholder="Фактически" style="max-width:150px"><button class="primary countSave" data-i="'+i+'">Сохранить</button></div></div>').join("");
  $("countLines").querySelectorAll(".countSave").forEach(el=>el.onclick=async()=>{const i=Number(el.dataset.i),input=$("countLines").querySelector('.countQty[data-i="'+i+'"]'),n=input.value.trim();if(n===""||!Number.isSafeInteger(Number(n))||Number(n)<0)return alert("Введите целое количество от нуля");
  try{await request("/stock/api/count-documents/"+current.id+"?depotId="+encodeURIComponent(depot()),"PATCH",{index:i,actual:Number(n)});current.items[i].actual=Number(n);render()}catch(e){alert(e.message)}});
+}
+// Use the same barcode lookup as the main PUDRA STOCK search, including alternate codes.
+// The receipt stays unchanged and all aliases lead to its single primary-barcode row.
+async function resolveCountBarcode(code,doc=current){
+ if(!doc)return null;
+ const input=String(code||"").trim();
+ if(!input)return null;
+ const direct=doc.items.find(x=>String(x.barcode||"").trim()===input);
+ if(direct)return {item:direct,primary:String(direct.barcode).trim(),alternate:false};
+ const cacheKey=String(doc.id)+"|"+input;
+ const cached=countAliasCache.get(cacheKey);
+ if(cached){
+  const hit=doc.items.find(x=>String(x.barcode||"").trim()===cached);
+  if(hit)return {item:hit,primary:cached,alternate:true};
+  countAliasCache.delete(cacheKey);
+ }
+ const data=await request("/stock/api/search?q="+encodeURIComponent(input));
+ for(const product of (Array.isArray(data.products)?data.products:[])){
+  const primary=String(product.barcode||"").trim();
+  const hit=doc.items.find(x=>String(x.barcode||"").trim()===primary);
+  if(hit){
+   countAliasCache.set(cacheKey,primary);
+   return {item:hit,primary,alternate:true};
+  }
+ }
+ return null;
 }
 async function upload(){
  const file=$("countFile").files[0];const pasted=$("countPaste").value.trim();if(!file&&!pasted){alert("Выберите Excel/CSV или вставьте таблицу");return}
@@ -139,18 +167,37 @@ async function camera(){
   const status=document.createElement("div");status.id="countScanStatus";status.style="padding:10px;border-radius:10px;margin:8px 0;background:#f2f2f5;font-weight:600";status.textContent="Наведите камеру на штрихкод";wrap.after(status);
   const controls=document.createElement("div");controls.id="countZoomControls";controls.style="display:flex;gap:8px;margin:8px 0;flex-wrap:wrap";controls.innerHTML='<button type="button" class="ghost" data-zoom="1">1×</button><button type="button" class="ghost" data-zoom="2">2× мелкий штрихкод</button><button type="button" class="ghost" data-zoom="3">3×</button>';status.after(controls);
   controls.querySelectorAll("[data-zoom]").forEach(btn=>btn.onclick=()=>scanner.zoom(Number(btn.dataset.zoom)));
-  scanner.setHandler(code=>{
+  scanner.setHandler(async code=>{
    const scanned=String(code||"").trim();
    if(!scanned||!current)return;
-   // Ignore website QR codes printed next to real product barcodes.
+   // A perfume-box QR URL is not a stock barcode.
    if(/^(?:https?:\/\/|www\.)/i.test(scanned))return;
    const now=Date.now();if(scanned===lastCountScan&&now-lastCountScanAt<1400)return;
+   if(countScanMatching)return;
    lastCountScan=scanned;lastCountScanAt=now;
-   const found=current.items.some(x=>x.barcode===scanned);
-   const status=$("countScanStatus");
-   if(status){status.textContent=found?"Найден товар: "+scanned:"Товара нет в документе: "+scanned+". Продолжайте сканирование.";status.style.background=found?"#dbf8e6":"#ffebe8";}
-   $("countFind").value=found?scanned:"";
-   render();
+   const doc=current,status=$("countScanStatus");
+   countScanMatching=true;
+   try{
+    if(!doc.items.some(x=>String(x.barcode||"").trim()===scanned)&&status){
+     status.textContent="Проверяю дополнительный штрихкод: "+scanned+"…";
+     status.style.background="#fff0d5";
+    }
+    const matched=await resolveCountBarcode(scanned,doc);
+    if(current!==doc||!sharedCameraActive)return;
+    if(status){
+     status.textContent=matched
+       ?(matched.alternate?"Доп. штрихкод "+scanned+" → основной "+matched.primary+" · "+matched.item.name:"Найден товар: "+matched.item.name)
+       :"Товара с таким штрихкодом нет в загруженном документе: "+scanned;
+     status.style.background=matched?"#dbf8e6":"#ffebe8";
+    }
+    $("countFind").value=matched?matched.primary:"";
+    render();
+   }catch(e){
+    if(current===doc&&sharedCameraActive&&status){
+     status.textContent="Не удалось проверить штрихкод "+scanned+": "+String(e?.message||e);
+     status.style.background="#ffebe8";
+    }
+   }finally{countScanMatching=false;}
   });
   sharedCameraActive=true;
   $("countScan").textContent="Остановить сканирование";
@@ -164,12 +211,28 @@ async function stopCamera(){
  const wrap=$("scanVideoWrap"),target=$("scanResult");
  if(wrap&&target)target.after(wrap);
  $("countZoomControls")?.remove();$("countScanStatus")?.remove();
- sharedCameraActive=false;
+ sharedCameraActive=false;countScanMatching=false;
  $("countScan").textContent="Сканировать штрихкод";
 }
 $("myDepot").onchange=()=>{localStorage.setItem("pudraMyDepot",depot());stopCamera();refresh()};
 $("countBack").onclick=()=>{stopCamera();refresh()};
-$("countFind").oninput=render;
+$("countFind").oninput=()=>{
+ render();
+ if(countManualLookupTimer)clearTimeout(countManualLookupTimer);
+ const code=$("countFind").value.trim(),doc=current;
+ if(!doc||!/^[0-9a-z_-]{8,32}$/i.test(code)||doc.items.some(x=>String(x.barcode||"").trim()===code))return;
+ countManualLookupTimer=setTimeout(async()=>{
+  try{
+   const matched=await resolveCountBarcode(code,doc);
+   if(current!==doc||$("countFind").value.trim()!==code||!matched)return;
+   $("countFind").value=matched.primary;
+   render();
+   msg("Дополнительный штрихкод "+code+" → основной "+matched.primary);
+  }catch(e){
+   if(current===doc&&$("countFind").value.trim()===code)msg("Не удалось проверить штрихкод: "+String(e?.message||e));
+  }
+ },450);
+};
 $("countScan").onclick=camera;
 $("countBackupAll").onclick=async()=>{
  try{

@@ -49,7 +49,13 @@ export function createStockApp(deps) {
     const admin=role==="admin"&&pin===ADMIN_PIN;
     const depotId=String(req.headers["x-pudra-depot"]||"");
     let storeCodes={};try{storeCodes=JSON.parse(process.env.STOCK_STORE_PASSWORDS||"{}")}catch{}
-    const matched=Object.entries(storeCodes).some(([depot,code])=>depot===depotId&&typeof code==="string"&&code.length>=8&&code===pin);
+    // The Riscani warehouse has an independently configurable staff password.
+    // It overrides the legacy store-code mapping ONLY for this depot.
+    const riscaniDepotId="ab5bfb42-ab4a-f111-8cc5-9c6b0045fe69";
+    const riscaniPassword=String(process.env.STOCK_DEPOT_RISCANI_PASSWORD||"");
+    const matched=depotId===riscaniDepotId && riscaniPassword
+      ? pin===riscaniPassword
+      : Object.entries(storeCodes).some(([depot,code])=>depot===depotId&&typeof code==="string"&&code.length>=8&&code===pin);
     const ok=admin || (role==="staff"&&matched);
     return {ok,admin,user,role:admin?"admin":"staff",depotId:admin?"":depotId};
   };

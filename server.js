@@ -1,3 +1,4 @@
+import {createControlExtras} from './control_extras.js';
 import { createServer } from "node:http";
 import crypto from "node:crypto";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
@@ -1437,10 +1438,12 @@ const stockApp = createStockApp({
   modernSearchAdditionalBarcode, legacySearchAdditionalBarcode, findIndexedAlternate, startAlternateIndexing, getAlternateIndexStatus
 });
 
+const controlExtras=createControlExtras({webRead:provectaWebRead,salesRows,docDepotId,docId});
 const controlSync=createControlSync({getArticles,getDepots,simpleArticle,simpleDepot,idOf,articleBarcodes,apiGet,asArray,getIndexedBarcodes,getAlternateIndexStatus,startBulkBarcodeSync,getBulkBarcodeStatus,getBulkBarcodeRecords});
 const httpServer = createServer(async (req, res) => {
   const url = new URL(req.url || "/", `http://${req.headers.host || "localhost"}`);
 
+  if (await controlExtras(req,res,url)) return;
   if (await controlSync(req,res,url)) return;
 
   if (await stockApp(req, res, url)) return;

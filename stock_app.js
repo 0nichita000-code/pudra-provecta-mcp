@@ -229,11 +229,17 @@ export function createStockApp(deps) {
       if(req.method==="GET"){sendJson(res,200,{document:doc});return true;}
       if(req.method==="DELETE"){
         if(!a.admin){sendJson(res,403,{error:"Удаление разрешено только администратору"});return true;}
-        const minimumAgeMs=5*24*60*60*1000;
-        const ageMs=Date.now()-Date.parse(doc.createdAt);
-        if(!Number.isFinite(ageMs)||ageMs<minimumAgeMs){sendJson(res,409,{error:"Документ хранится минимум 5 суток с момента загрузки. Удаление пока запрещено."});return true;}
-        await workflowWrite(db=>{db.documents=db.documents.filter(x=>x.id!==id);});
-        sendJson(res,200,{ok:true});return true;
+        // Admin can remove an incorrectly uploaded receipt immediately.
+        // Staff still cannot delete; apply the removal to persisted storage atomically.
+        const deleted=await workflowWrite(db=>{
+          const i=db.documents.findIndex(x=>x.id===id);
+          if(i<0)return false;
+          db.documents.splice(i,1);
+          return true;
+        });
+        if(!deleted){sendJson(res,404,{error:"Документ уже удалён"});return true;}
+        console.info("[PUDRA COUNT] admin deleted document",id,"by",a.user);
+        sendJson(res,200,{ok:true,deletedId:id});return true;
       }
       if(req.method==="PATCH"){
         if(doc.status!=="OPEN"){sendJson(res,409,{error:"Документ закрыт"});return true;}

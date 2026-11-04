@@ -82,7 +82,7 @@ function render(){
  const q=$("countFind").value.trim().toLowerCase();
  const matched=current.items.map((x,i)=>({x,i})).filter(({x})=>!q||x.barcode.toLowerCase().includes(q)||x.name.toLowerCase().includes(q)).slice(0,100);
  const completed=current.items.filter(x=>x.actual!==null).length;
- $("countLines").innerHTML='<p class="muted">Проверено '+completed+' из '+current.items.length+'. Не проверено ≠ ноль.</p>'+matched.map(({x,i})=>'<div class="card" style="padding:12px;margin:8px 0"><strong>'+escape(x.name)+'</strong><div class="muted">'+escape(x.barcode)+'</div><div>Должно быть: <strong>'+x.expected+'</strong> · Факт: <strong>'+(x.actual===null?"не проверено":x.actual)+'</strong></div><div class="row"><input class="countQty" data-i="'+i+'" type="number" min="0" step="1" value="'+(x.actual===null?"":x.actual)+'" placeholder="Фактически" style="max-width:150px"><button class="primary countSave" data-i="'+i+'">Сохранить</button></div></div>').join("");
+ $("countLines").innerHTML='<p class="muted">Проверено '+completed+' из '+current.items.length+'. Не проверено ≠ ноль.</p>'+(q&&!matched.length?'<div class="notice">По этому штрихкоду нет позиции в текущем документе.</div>':'')+matched.map(({x,i})=>'<div class="card" style="padding:12px;margin:8px 0"><strong>'+escape(x.name)+'</strong><div class="muted">'+escape(x.barcode)+'</div><div>Должно быть: <strong>'+x.expected+'</strong> · Факт: <strong>'+(x.actual===null?"не проверено":x.actual)+'</strong></div><div class="row"><input class="countQty" data-i="'+i+'" type="number" min="0" step="1" value="'+(x.actual===null?"":x.actual)+'" placeholder="Фактически" style="max-width:150px"><button class="primary countSave" data-i="'+i+'">Сохранить</button></div></div>').join("");
  $("countLines").querySelectorAll(".countSave").forEach(el=>el.onclick=async()=>{const i=Number(el.dataset.i),input=$("countLines").querySelector('.countQty[data-i="'+i+'"]'),n=input.value.trim();if(n===""||!Number.isSafeInteger(Number(n))||Number(n)<0)return alert("Введите целое количество от нуля");
  try{await request("/stock/api/count-documents/"+current.id+"?depotId="+encodeURIComponent(depot()),"PATCH",{index:i,actual:Number(n)});current.items[i].actual=Number(n);render()}catch(e){alert(e.message)}});
 }
@@ -102,7 +102,8 @@ async function resolveCountBarcode(code,doc=current){
   countAliasCache.delete(cacheKey);
  }
  const data=await request("/stock/api/search?q="+encodeURIComponent(input));
- for(const product of (Array.isArray(data.products)?data.products:[])){
+ const products=Array.isArray(data.products)?data.products:[];
+ for(const product of products){
   const primary=String(product.barcode||"").trim();
   const hit=doc.items.find(x=>String(x.barcode||"").trim()===primary);
   if(hit){
@@ -110,6 +111,9 @@ async function resolveCountBarcode(code,doc=current){
    return {item:hit,primary,alternate:true};
   }
  }
+ // Identified in Provecta but absent from this uploaded document.
+ // Never associate it with an unrelated visible line in the count list.
+ if(products.length)return {notInDocument:true,product:products[0]};
  return null;
 }
 async function upload(){
@@ -184,14 +188,18 @@ async function camera(){
     }
     const matched=await resolveCountBarcode(scanned,doc);
     if(current!==doc||!sharedCameraActive)return;
-    if(status){
-     status.textContent=matched
+    const found=Boolean(matched&&!matched.notInDocument);
+   if(status){
+     status.textContent=found
        ?(matched.alternate?"Доп. штрихкод "+scanned+" → основной "+matched.primary+" · "+matched.item.name:"Найден товар: "+matched.item.name)
-       :"Товара с таким штрихкодом нет в загруженном документе: "+scanned;
-     status.style.background=matched?"#dbf8e6":"#ffebe8";
-    }
-    $("countFind").value=matched?matched.primary:"";
-    render();
+       :matched?.notInDocument
+        ?"В Provecta найден: "+matched.product.name+" (основной "+matched.product.barcode+"), но этой позиции нет в загруженном документе. Код: "+scanned
+        :"Штрихкод "+scanned+" не сопоставлен с товарами загруженного документа. Проверьте товар и его основной код.";
+     status.style.background=found?"#dbf8e6":"#ffebe8";
+   }
+   // Keep the unmatched code in the filter instead of showing unrelated items.
+   $("countFind").value=found?matched.primary:scanned;
+   render();
    }catch(e){
     if(current===doc&&sharedCameraActive&&status){
      status.textContent="Не удалось проверить штрихкод "+scanned+": "+String(e?.message||e);
@@ -225,6 +233,10 @@ $("countFind").oninput=()=>{
   try{
    const matched=await resolveCountBarcode(code,doc);
    if(current!==doc||$("countFind").value.trim()!==code||!matched)return;
+   if(matched.notInDocument){
+    msg("В Provecta найден товар «"+matched.product.name+"», но его нет в загруженном документе.");
+    return;
+   }
    $("countFind").value=matched.primary;
    render();
    msg("Дополнительный штрихкод "+code+" → основной "+matched.primary);

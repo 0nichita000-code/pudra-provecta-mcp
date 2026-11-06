@@ -11,3 +11,9 @@ test('public branch view uses verified cache, excludes technical warehouses and 
 test('stale cache does not become fresh public availability',async()=>{
  const handle=createShopCatalog({...helpers,getArticles:async()=>[],apiGet:async()=>[],getStockCacheState:()=>({ready:true,lastSuccessAt:Date.now()-700000}),getCachedStocks:()=>[]});let status;await handle({method:'GET',headers:{}},{writeHead:s=>status=s,end:()=>{}},new URL('https://test/shop/api/branches'));assert.equal(status,503);
 });
+test('an initially cold cache can recover without restarting the server',async()=>{
+ let ready=false;
+ const handle=createShopCatalog({...helpers,getArticles:async()=>[{id:'a',name:'Product',price:10}],apiGet:async()=>[],getStockCacheState:()=>({ready,lastSuccessAt:ready?Date.now():0}),getCachedStocks:()=>[{id:PUBLIC_STORES[0].id,quantity:2}]});
+ const request=async()=>{let status;await handle({method:'GET',headers:{}},{writeHead:s=>status=s,end:()=>{}},new URL('https://test/shop/api/branches'));return status};
+ assert.equal(await request(),503);ready=true;assert.equal(await request(),200);
+});

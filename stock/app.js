@@ -1,5 +1,10 @@
 (()=>{
 const API_BASE="https://pudra-provecta-mcp.onrender.com";
+// Linear formats for the pinned @zxing/browser 0.1.5 / @zxing/library enums.
+const STOCK_LINEAR_ZXING=Object.freeze([1,2,3,4,6,7,8,12,13,14,15]);
+const STOCK_LINEAR_NATIVE=Object.freeze(['codabar','code_39','code_93','code_128','ean_8','ean_13','itf','upc_a','upc_e']);
+function stockLinearResult(result){return !!result&&STOCK_LINEAR_ZXING.includes(result.getBarcodeFormat?.()??result.format);}
+function stockNativeFormats(supported){return supported?STOCK_LINEAR_NATIVE.filter(format=>supported.includes(format)):[...STOCK_LINEAR_NATIVE];}
 const S={user:"",role:"staff",pin:"",depots:[],product:null,stream:null,scanTimer:null,watchTimer:null,lastTransferId:0,lastDiffId:0,zxingControls:null,scanLocked:false,lastScanned:"",cameraIds:[],cameraIndex:0,inventory:[],invShown:0,invGroupName:"",audioCtx:null,depotId:""};
 const $=id=>document.getElementById(id);
 const esc=s=>String(s??"").replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[m]));
@@ -527,9 +532,9 @@ async function startScan(){
 
     // Основной сканер ZXing — работает и там, где BarcodeDetector отсутствует.
     if(window.ZXingBrowser){
-      const reader=new ZXingBrowser.BrowserMultiFormatReader();
+      const reader=new ZXingBrowser.BrowserMultiFormatReader(new Map([[2,[...STOCK_LINEAR_ZXING]]]));
       S.zxingControls=await reader.decodeFromStream(stream,$("video"),(result,error,controls)=>{
-        if(result&&!S.scanLocked){
+        if(stockLinearResult(result)&&!S.scanLocked){
           const v=String(result.getText ? result.getText() : result.text || "").trim();
           if(v)handleScannedCode(v);
         }
@@ -541,15 +546,16 @@ async function startScan(){
     // Он использует тот же видеопоток и повышает шанс быстрого чтения.
     if("BarcodeDetector" in window){
       try{
-        const formats=await BarcodeDetector.getSupportedFormats?.().catch?.(()=>[]) || [];
-        const wanted=["ean_13","ean_8","code_128","code_39","upc_a","upc_e","itf"];
-        const use=formats.length?wanted.filter(x=>formats.includes(x)):wanted;
-        const det=new BarcodeDetector(use.length?{formats:use}:{});
+        const formats=typeof BarcodeDetector.getSupportedFormats==='function'?await BarcodeDetector.getSupportedFormats():null;
+        const use=stockNativeFormats(formats);
+        if(!use.length)throw new Error('Нет поддерживаемых линейных штрихкодов');
+        const det=new BarcodeDetector({formats:use});
         S.scanTimer=setInterval(async()=>{
           if(S.scanLocked)return;
           try{
             const codes=await det.detect($("video"));
-            const v=String(codes?.[0]?.rawValue||"").trim();
+            const code=codes?.find(code=>STOCK_LINEAR_NATIVE.includes(code.format));
+            const v=String(code?.rawValue||"").trim();
             if(v)handleScannedCode(v);
           }catch{}
         },250);

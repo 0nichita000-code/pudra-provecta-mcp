@@ -1441,7 +1441,7 @@ const stockApp = createStockApp({
 
 const controlExtras=createControlExtras({webRead:provectaWebRead,salesRows,docDepotId,docId});
 const controlSync=createControlSync({getArticles,getDepots,simpleArticle,simpleDepot,idOf,articleBarcodes,apiGet,asArray,getIndexedBarcodes,getAlternateIndexStatus,startBulkBarcodeSync,getBulkBarcodeStatus,getBulkBarcodeRecords});
-const shopCatalog=createShopCatalog({getArticles,simpleArticle,idOf,asArray,apiGet});
+const shopCatalog=createShopCatalog({getArticles,simpleArticle,idOf,asArray,apiGet,getCachedStocks,getStockCacheState});
 const httpServer = createServer(async (req, res) => {
   const url = new URL(req.url || "/", `http://${req.headers.host || "localhost"}`);
 

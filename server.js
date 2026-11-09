@@ -1,3 +1,4 @@
+import {handleStockSafely} from './stock_transport.js';
 import {createShopCatalog} from './shop_catalog.js';
 import {createControlExtras} from './control_extras.js';
 import { createServer } from "node:http";
@@ -1449,7 +1450,7 @@ const httpServer = createServer(async (req, res) => {
   if (await controlExtras(req,res,url)) return;
   if (await controlSync(req,res,url)) return;
 
-  if (await stockApp(req, res, url)) return;
+  if (await handleStockSafely(stockApp,req,res,url)) return;
 
   if (req.method === "GET" && url.pathname === "/") {
     res.writeHead(200, { "content-type": "application/json" });

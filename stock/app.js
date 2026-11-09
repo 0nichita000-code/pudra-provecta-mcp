@@ -33,7 +33,7 @@ async function api(url,opt={}){
     }
   }
   if(last?.name==="AbortError")throw new Error("Сервер не успел ответить.");
-  if(String(last?.message||"").includes("Failed to fetch"))throw new Error("Не удалось связаться с сервером.");
+  if(/Failed to fetch|Load failed|NetworkError|fetch failed/i.test(String(last?.message||"")))throw new Error("Не удалось связаться с сервером PUDRA STOCK. Проверьте соединение и повторите запрос.");
   throw last;
 }
 function msg(el,text,type=""){el.innerHTML=text?'<div class="notice '+type+'">'+esc(text)+'</div>':"";}

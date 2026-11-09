@@ -1,7 +1,9 @@
 import fs from "node:fs/promises";
 export function workflowStorage(path,Pool){
  const url=process.env.STOCK_DATABASE_URL||process.env.DATABASE_URL;
- const pool=url?new Pool({connectionString:url,ssl:process.env.STOCK_DB_SSL==="false"?false:{rejectUnauthorized:false},max:3}):null;
+ const pool=url?new Pool({connectionString:url,ssl:process.env.STOCK_DB_SSL==="false"?false:{rejectUnauthorized:false},max:3,connectionTimeoutMillis:10000}):null;
+ // An idle PostgreSQL client error must not terminate unrelated catalogue requests.
+ if(pool)pool.on('error',error=>console.error('[PUDRA STORAGE] idle_connection_error',String(error?.code||'DATABASE_ERROR')));
  let local=null,lock=Promise.resolve(),initPromise;
  async function init(){
   if(!pool)return;

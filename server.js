@@ -1,3 +1,4 @@
+import {stockShopPhoto,stockShopPhotoStatus} from './stock_shop_photos.js';
 import {handleStockSafely} from './stock_transport.js';
 import {createShopCatalog} from './shop_catalog.js';
 import {createControlExtras} from './control_extras.js';
@@ -936,6 +937,7 @@ async function getLots(dateFrom, dateTo, extra = {}) {
 function simpleBranch(b) { return { id: idOf(b), code: b.Code ?? b.code ?? "", name: b.Name ?? b.name ?? "" }; }
 function simpleDepot(d) { return { id: idOf(d), code: d.Code ?? d.code ?? "", name: d.Name ?? d.name ?? "", branch: d.Branch ?? d.branch ?? null }; }
 function articlePhoto(a) {
+  const shopPhoto=stockShopPhoto(idOf(a));if(shopPhoto)return shopPhoto;
   const candidates = [
     a.PhotoUrl, a.photoUrl, a.ImageUrl, a.imageUrl,
     a.Photo, a.photo, a.Image, a.image, a.Picture, a.picture,
@@ -1436,6 +1438,7 @@ function oauthChallenge(req) {
 }
 
 const stockApp = createStockApp({
+  stockShopPhotoStatus,
   getArticles, getDepots, getCachedStocks, refreshStockCache, getStockCacheState,
   simpleDepot, simpleArticle, articleBarcodes, idOf, asArray, apiGet, salesRows,
   modernSearchAdditionalBarcode, legacySearchAdditionalBarcode, findIndexedAlternate, startAlternateIndexing, getAlternateIndexStatus

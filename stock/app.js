@@ -177,7 +177,7 @@ function showProduct(p){
   S.product=p;
   const card=$("productCard");card.classList.remove("hidden");
   const hiddenBadge=(S.role==="admin"&&p.hidden)?'<div style="display:inline-block;margin:0 0 10px 0;padding:7px 10px;border-radius:999px;background:#fff0f0;color:#b42318;border:1px solid #f3b6b0;font-weight:800;font-size:13px">СКРЫТ / НЕАКТИВЕН В PROVECTA</div>':'';
-  card.innerHTML=hiddenBadge+'<div class="row"><div class="grow"><div class="name" style="font-size:20px">'+esc(p.name)+'</div><div class="muted">Штрихкод: '+esc(p.barcode||"—")+' · Код: '+esc(p.code||"—")+'</div></div><span class="pill">'+esc(p.price)+' MDL</span></div>'+
+  card.innerHTML=hiddenBadge+photoHtml(p)+'<div class="row"><div class="grow"><div class="name" style="font-size:20px">'+esc(p.name)+'</div><div class="muted">Штрихкод: '+esc(p.barcode||"—")+' · Код: '+esc(p.code||"—")+'</div></div><span class="pill">'+esc(p.price)+' MDL</span></div>'+
     '<h4>Остатки</h4>'+stockRows(p)+
     '<div style="height:12px"></div><div class="grid"><button id="moveBtn" class="primary">Запросить перемещение</button><button id="diffBtn" class="ghost">Есть расхождение</button></div>'+
     '<div id="actionBox" style="margin-top:12px"></div>';
@@ -210,7 +210,7 @@ async function search(q){
   try{
     const d=await api("/stock/api/search?q="+encodeURIComponent(q));msg($("searchMsg"),d.products.length?"Найдено: "+d.products.length:"Ничего не найдено");
     if(d.products.length===1){showProduct(d.products[0]);return;}
-    $("results").innerHTML=d.products.map((p,i)=>'<div class="product" data-i="'+i+'"><div class="name">'+esc(p.name)+'</div><div class="muted">'+esc(p.barcode||"—")+' · '+esc(p.price)+' MDL</div></div>').join("");
+    $("results").innerHTML=d.products.map((p,i)=>'<div class="product" data-i="'+i+'">'+photoHtml(p)+'<div class="name">'+esc(p.name)+'</div><div class="muted">'+esc(p.barcode||"—")+' · '+esc(p.price)+' MDL</div></div>').join("");
     document.querySelectorAll(".product[data-i]").forEach(el=>el.addEventListener("click",()=>showProduct(d.products[Number(el.dataset.i)])));
   }catch(e){msg($("searchMsg"),e.message,"bad");}
 }
@@ -293,7 +293,7 @@ function renderInventory(reset=false){
   const shown=rows.slice(0,S.invShown);
   $("inventoryList").innerHTML=shown.length?shown.map((p,i)=>{
     const qty=Number(p.stocks.find(x=>x.depotId===depotId)?.quantity||0);
-    return '<div class="product invProduct" data-inv="'+i+'"><div class="name">'+esc(p.name)+'</div><div class="muted">'+esc(p.barcode||"—")+' · '+esc(p.price)+' MDL</div><div class="stock"><span>'+esc(depotName)+'</span><span class="qty">'+esc(qty)+'</span></div></div>';
+    return '<div class="product invProduct" data-inv="'+i+'">'+photoHtml(p)+'<div class="name">'+esc(p.name)+'</div><div class="muted">'+esc(p.barcode||"—")+' · '+esc(p.price)+' MDL</div><div class="stock"><span>'+esc(depotName)+'</span><span class="qty">'+esc(qty)+'</span></div></div>';
   }).join(""):'<div class="notice">В этой группе нет товара с положительным остатком в выбранном магазине.</div>';
   $("invMore").classList.toggle("hidden",S.invShown>=rows.length);
   document.querySelectorAll(".invProduct").forEach(el=>el.addEventListener("click",()=>{
@@ -395,7 +395,7 @@ function scanStockRows(p){
 }
 function photoHtml(p){
   const src=String(p?.photo||p?.photoUrl||p?.image||p?.imageUrl||"").trim();
-  if(src)return '<div class="productPhoto"><img src="'+esc(src)+'" alt="" onerror="this.parentNode.innerHTML=\'Нет фото\'"></div>';
+  if(src)return '<div class="productPhoto"><img loading="lazy" decoding="async" src="'+esc(src)+'" alt="'+esc(p.name||'Фото товара')+'" onerror="this.parentNode.innerHTML=\'Нет фото\'"></div>';
   return '<div class="productPhoto">Нет фото</div>';
 }
 function compactScanner(on=true){

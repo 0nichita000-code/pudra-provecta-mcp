@@ -195,6 +195,7 @@ export function createStockApp(deps) {
     if(!url.pathname.startsWith("/stock/api/"))return false;
     if(req.method==="OPTIONS"){res.writeHead(204,corsHeaders);res.end();return true;}
     if(req.method==="GET"&&url.pathname==="/stock/api/stores"){const rawDepots=await getDepots(false);sendJson(res,200,{depots:rawDepots.map(simpleDepot).filter(d=>d.id && allowedDepotName(d.name))});return true;}
+    if(req.method==='GET'&&url.pathname==='/stock/api/photo-status'){sendJson(res,200,deps.stockShopPhotoStatus||{count:0});return true;}
     const a=authInfo(req); if(!a.ok){sendJson(res,401,{error:"Неверный PIN"});return true;}
 
     if(url.pathname==="/stock/api/count-storage-status"&&req.method==="GET"){

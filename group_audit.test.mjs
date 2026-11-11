@@ -22,3 +22,17 @@ test('failed group reads cannot be reported as a completed empty catalogue',asyn
  handler.groupAudit();for(let i=0;i<20&&handler.groupAudit().running;i++)await new Promise(setImmediate);
  const result=handler.groupAudit();assert.equal(result.complete,false);assert.equal(result.products,undefined);assert.match(result.datasets.groups.error,/Upstream/);
 });
+
+test('explicit refresh rereads memberships even when product and group versions are unchanged',async()=>{
+ let member=true,reads=0;
+ const handler=createControlExtras({webRead:async(method,body)=>{
+  if(method==='ArticleGroupSearch')return {Entities:[{Id:'g',Name:'ROUND LAB',Version:1}],Pager:{Number:1}};
+  if(body.articlePredicate.ArticleGroupPredicate){reads++;return {Entities:member?[{Id:'p'}]:[],Pager:{Number:member?1:0}};}
+  return {Entities:[{Id:'p',Name:'Product',Version:1}],Pager:{Number:1}};
+ }});
+ handler.groupAudit();while(handler.groupAudit().running)await new Promise(setImmediate);
+ assert.equal(handler.groupAudit().products[0].groups.length,1);
+ member=false;assert.equal(handler.groupAudit(0,true).complete,false);
+ while(handler.groupAudit().running)await new Promise(setImmediate);
+ assert.deepEqual(handler.groupAudit().products[0].groups,[]);assert.equal(reads,2);
+});

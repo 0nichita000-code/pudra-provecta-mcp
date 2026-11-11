@@ -1017,10 +1017,10 @@ function createMcpServer() {
   mcp.registerTool("connection_status", {
     title: "Provecta connection status",
     description: "Verify Provecta credentials and return the selected client plus branch/depot counts.",
-    inputSchema: { groupAudit: z.boolean().optional(), groupAuditOffset: z.number().int().min(0).optional() },
+    inputSchema: { groupAudit: z.boolean().optional(), groupAuditOffset: z.number().int().min(0).optional(), groupAuditRefresh: z.boolean().optional() },
     annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: true }
-  }, async ({groupAudit = false, groupAuditOffset = 0}) => {
-    if(groupAudit)return jsonReply({groupAudit:controlExtras.groupAudit(groupAuditOffset)});
+  }, async ({groupAudit = false, groupAuditOffset = 0, groupAuditRefresh = false}) => {
+    if(groupAudit)return jsonReply({groupAudit:controlExtras.groupAudit(groupAuditOffset,groupAuditRefresh)});
     const a = await login(true);
     const [branches, depots] = await Promise.all([getBranches(true), getDepots(true)]);
     let schema = null;

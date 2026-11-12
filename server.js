@@ -1,3 +1,4 @@
+import {createGalleryPhotos} from './gallery_photos.js';
 import {stockShopPhoto,stockShopPhotoStatus} from './stock_shop_photos.js';
 import {handleStockSafely} from './stock_transport.js';
 import {createShopCatalog} from './shop_catalog.js';
@@ -1109,10 +1110,10 @@ function createMcpServer() {
       }
     }
 
-    const items = matchedRaw.slice(0, limit).map(a => ({
+    const items = await enrichPhotos(matchedRaw.slice(0, limit).map(a => ({
       ...simpleArticle(a),
       matchedByAlternateBarcode
-    }));
+    })));
 
     if (/^\d{8,14}$/.test(query) && items.length === 1) {
       if (!stockCache.ready) {
@@ -1437,7 +1438,9 @@ function oauthChallenge(req) {
   return `Bearer resource_metadata="${base}/.well-known/oauth-protected-resource", scope="${OAUTH_SCOPE}"`;
 }
 
+const enrichPhotos=createGalleryPhotos(provectaWebRead);
 const stockApp = createStockApp({
+  enrichPhotos,
   stockShopPhotoStatus,
   getArticles, getDepots, getCachedStocks, refreshStockCache, getStockCacheState,
   simpleDepot, simpleArticle, articleBarcodes, idOf, asArray, apiGet, salesRows,

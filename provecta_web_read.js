@@ -15,7 +15,7 @@ export function createProvectaWebRead({origin,username,password,getClient,readJs
   })().finally(()=>authenticating=null);return authenticating;
  }
  return async(method,body)=>{
-  if(!['ArticleBarcodeSearch','ArticleSearch','ArticleLoad','ArticleGroupSearch','PricelistSearch','PricelistItemSearch','GiftcardSearch','DocumentResumeSearch','LayoutSearch','TenderSearch','SchemeSearch'].includes(method))throw Error('Read operation not permitted');
-  const code=await authenticate();return post((['LayoutSearch','TenderSearch','SchemeSearch'].includes(method)?'Framework/Owner.svc/Web/':'Stock.svc/Web/')+method,body,code);
+  if(!['FilestreamSearch','ArticleBarcodeSearch','ArticleSearch','ArticleLoad','ArticleGroupSearch','PricelistSearch','PricelistItemSearch','GiftcardSearch','DocumentResumeSearch','LayoutSearch','TenderSearch','SchemeSearch'].includes(method))throw Error('Read operation not permitted');
+  const code=await authenticate();return post((method==='FilestreamSearch'?'Framework/Common.svc/Web/':['LayoutSearch','TenderSearch','SchemeSearch'].includes(method)?'Framework/Owner.svc/Web/':'Stock.svc/Web/')+method,body,code);
  };
 }

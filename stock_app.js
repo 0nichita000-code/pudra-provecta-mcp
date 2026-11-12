@@ -151,7 +151,8 @@ export function createStockApp(deps) {
       }
     }
 
-    return matched.map(x=>({...shape(x,ds),hidden:hiddenMatch}));
+    const products=matched.map(x=>({...shape(x,ds),hidden:hiddenMatch}));
+    return deps.enrichPhotos ? await deps.enrichPhotos(products) : products;
   }
   async function findProduct(productId,barcode){
     const {rawArticles,ds}=await catalogs();
@@ -167,7 +168,8 @@ export function createStockApp(deps) {
       }
     }
     if(!a)return null;
-    return shape(a,ds);
+    const product=shape(a,ds);
+    return deps.enrichPhotos ? (await deps.enrichPhotos([product]))[0] : product;
   }
   function transferError(p,ds,fromId,toId,qty){
     if(!fromId||!toId||fromId===toId)return "Выберите разные точки ОТКУДА и КУДА.";

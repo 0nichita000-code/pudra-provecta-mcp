@@ -114,7 +114,7 @@ export function createStockApp(deps) {
     const x=simpleArticle(a);
     return {...x,group:deriveGroup(a),stocks:stocksFor(a,ds)};
   }
-  async function search(q,includeHidden=false){
+  async function search(q,includeHidden=false,{fastPhotos=false}={}){
     const s=String(q||"").trim().toLowerCase();
     const resolvedBarcode=verifiedAlternateToPrimary.get(s)||s;
     const {rawArticles,ds}=await catalogs();
@@ -152,7 +152,7 @@ export function createStockApp(deps) {
     }
 
     const products=matched.map(x=>({...shape(x,ds),hidden:hiddenMatch}));
-    return deps.enrichPhotos ? await deps.enrichPhotos(products) : products;
+    return deps.enrichPhotos ? await deps.enrichPhotos(products,fastPhotos?{timeoutMs:250}:undefined) : products;
   }
   async function findProduct(productId,barcode){
     const {rawArticles,ds}=await catalogs();
@@ -279,7 +279,7 @@ export function createStockApp(deps) {
       sendJson(res,202,getAlternateIndexStatus());return true;
     }
     if(req.method==="GET"&&url.pathname==="/stock/api/search"){
-      const products=await search(url.searchParams.get("q")||"",a.admin);sendJson(res,200,{products,cache:getStockCacheState()});return true;
+      const products=await search(url.searchParams.get("q")||"",a.admin,{fastPhotos:url.searchParams.get("scan")==="1"});sendJson(res,200,{products,cache:getStockCacheState()});return true;
     }
     if(req.method==="POST"&&url.pathname==="/stock/api/refresh"){
       await refreshStockCache(true);

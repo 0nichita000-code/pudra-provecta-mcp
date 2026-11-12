@@ -29,14 +29,14 @@ export function createGalleryPhotos(read,{now=Date.now}={}) {
         cache.set(id,{photo:selected.get(id)||'',expires:now()+(selected.has(id)?600000:60000)});
     }
   }
-  return async products=>{
+  return async (products,{timeoutMs=8000}={})=>{
     const ids=[...new Set(products.filter(p=>!p.photo&&/^[a-f0-9-]{36}$/i.test(p.id)).map(p=>p.id.toLowerCase()))];
     const work=(async()=>{try {
       if(active)await active;
       const missing=ids.filter(id=>!cache.has(id)||cache.get(id).expires<=now());
       if(missing.length){active=populate(missing);try{await active;}finally{active=null;}}
     }catch{console.warn('PROVECTA_GALLERY_UNAVAILABLE');}})();
-    let timer;try{await Promise.race([work,new Promise(resolve=>{timer=setTimeout(resolve,8000)})]);}finally{clearTimeout(timer);}
+    let timer;try{await Promise.race([work,new Promise(resolve=>{timer=setTimeout(resolve,Math.max(0,Math.min(8000,timeoutMs)))})]);}finally{clearTimeout(timer);}
     return products.map(p=>p.photo?p:{...p,photo:cache.get(String(p.id).toLowerCase())?.photo||''});
   };
 }

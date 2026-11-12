@@ -16,3 +16,10 @@ test('gallery failure preserves catalogue and retries; unsafe URLs are rejected'
  assert.equal((await enrich([{id,photo:''}]))[0].photo,'');assert.equal((await enrich([{id,photo:''}]))[0].photo,'https://example.com/photo.jpg');
  for(const Url of ['javascript:alert(1)','data:image/png;base64,xx','https://secret:pass@example.com/a'])assert.equal(galleryUrl({Url}),'');
 });
+
+test('scanner budget returns without waiting for gallery and reuses background result',async()=>{
+ let release;const gate=new Promise(r=>release=r);let calls=0;
+ const enrich=createGalleryPhotos(async()=>{calls++;await gate;return {Entities:[{EntityId:id,Url:'https://example.com/ready.jpg'}]}});
+ const fast=await enrich([{id,photo:''}],{timeoutMs:5});assert.equal(fast[0].photo,'');assert.equal(calls,1);
+ release();const ready=await enrich([{id,photo:''}]);assert.equal(ready[0].photo,'https://example.com/ready.jpg');assert.equal(calls,1);
+});

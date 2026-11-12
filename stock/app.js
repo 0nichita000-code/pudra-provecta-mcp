@@ -403,13 +403,11 @@ function compactScanner(on=true){
   if(wrap)wrap.classList.toggle("compact",!!on);
 }
 async function fetchScannedProduct(v){
+  const slow=setTimeout(()=>{if(S.scanLocked&&S.lastScanned===v)msg($("scanInfo"),"Сервер отвечает медленно. Продолжаю проверку штрихкода: "+v+"…");},4000);
   try{
-    const d=await api("/stock/api/search?q="+encodeURIComponent(v),{timeoutMs:3500,retries:0});
+    const d=await api("/stock/api/search?scan=1&q="+encodeURIComponent(v),{timeoutMs:45000,retries:0});
     return d.products?.[0]||null;
-  }catch(e){
-    // Network timeout is not proof that a product does not exist.
-    throw e;
-  }
+  }finally{clearTimeout(slow);}
 }
 async function refreshScanStocks(v){
   for(let i=0;i<4;i++){
@@ -449,6 +447,7 @@ async function handleScannedCode(v){
   msg($("scanInfo"),"Проверяю штрихкод: "+v+"…");
   try{
     const p=await fetchScannedProduct(v);
+    if(!S.scanLocked||S.lastScanned!==v)return;
     if(!p){
       $("scanResult").classList.remove("hidden");
       $("scanResult").innerHTML='<div class="notice bad" style="font-size:18px;font-weight:800;text-align:center;padding:16px">Товар с таким штрихкодом не найден</div><div class="muted" style="text-align:center;margin-top:8px">Штрихкод: '+esc(v)+'</div>';
@@ -489,11 +488,14 @@ async function handleScannedCode(v){
       msg($("scanInfo"),"Камера включена. Наведите на следующий штрихкод.","ok");
     });
   }catch(e){
+    if(!S.scanLocked||S.lastScanned!==v)return;
+    msg($("scanInfo"),"Проверка не завершена. Повторите запрос или сканируйте следующий товар.","bad");
     $("scanResult").classList.remove("hidden");
-    $("scanResult").innerHTML='<div class="notice bad">'+esc(e.message)+'</div><button id="scanNext" class="primary" style="width:100%;margin-top:12px">Дальше</button>';
+    $("scanResult").innerHTML='<div class="notice bad">'+esc(e.message)+'</div><div class="muted">Штрихкод: '+esc(v)+'</div><button id="scanRetry" class="primary" style="width:100%;margin-top:12px">Повторить проверку</button><button id="scanNext" class="ghost" style="width:100%;margin-top:8px">Дальше</button>';
+    $("scanRetry").addEventListener("click",()=>{S.scanLocked=false;$("scanResult").classList.add("hidden");handleScannedCode(v);});
     $("scanNext").addEventListener("click",()=>{
       $("scanResult").classList.add("hidden");
-      S.scanLocked=false;
+      S.scanLocked=false;S.lastScanned="";
       msg($("scanInfo"),"Камера включена. Наведите на следующий штрихкод.","ok");
     });
   }

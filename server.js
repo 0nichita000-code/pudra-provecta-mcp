@@ -1181,11 +1181,29 @@ function createMcpServer() {
     const selectedIds = new Set(selectedDepots.map(d => String(d.id)));
 
     const items = [];
+    // Explicitly selected depots outside the shop cache must be read from
+    // Provecta, rather than being misreported as an empty stock balance.
+    const directDepots = [];
+    if (depotSet.size || branchSet.size) {
+      for (const d of selectedDepots.filter(d => !stockCache.readyDepots.has(d.id))) {
+        const raw = await apiGet('/v1/resume/currentBalance', {depotId:[d.id]});
+        if (raw == null) throw Error('No stock response for '+d.name);
+        for (const row of asArray(raw)) {
+          const aid=idOf(row.Article??row.article??row.ArticleId??row.articleId);
+          const quantity=Number(row.BalanceQuantitySum??row.balanceQuantitySum);
+          if (!aid || !Number.isFinite(quantity)) throw Error('Invalid stock row for '+d.name);
+          const a=articleCache.byId.get(aid)||{};
+          if(items.length<limit)items.push({Article:{Id:aid},Depot:{Id:d.id,Name:d.name},BalanceQuantitySum:quantity,ArticleInfo:simpleArticle(a)});
+        }
+        directDepots.push(d.id);
+      }
+    }
     outer:
     for (const [aid, xs] of stockCache.byArticle.entries()) {
       const a = articleCache.byId.get(aid) || {};
       for (const x of xs) {
         if (!selectedIds.has(String(x.id))) continue;
+        if (items.length >= limit) break outer;
         items.push({
           Article: { Id: aid },
           Depot: { Id: x.id, Name: x.name },
@@ -1204,10 +1222,11 @@ function createMcpServer() {
     }
 
     return jsonReply({
+      directDepots,
       count: items.length,
       totalReturnedByProvecta: items.length,
       items,
-      source: "pudra-stock-cache",
+      source: directDepots.length ? "pudra-stock-cache+provecta-live" : "pudra-stock-cache",
       stockCacheAgeMs: Date.now() - stockCache.at,
       readyDepots: stockCache.readyDepots?.size || 0,
       cacheStatus: getStockCacheState()

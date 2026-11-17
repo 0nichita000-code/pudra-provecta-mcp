@@ -216,25 +216,36 @@ async function search(q){
 }
 async function refresh(){try{msg($("searchMsg"),"Обновляю остатки…");await api("/stock/api/refresh",{method:"POST",body:"{}"});msg($("searchMsg"),"Остатки обновлены","ok");if(S.product)await search(S.product.barcode||S.product.name);}catch(e){msg($("searchMsg"),e.message,"bad");}}
 function statusRu(s){return ({NEW:"Новая",APPROVED:"Подтверждена",PICKING:"Собирается",SENT:"Отправлена",RECEIVED:"Получена",CLOSED:"Закрыта",REJECTED:"Отклонена"})[s]||s;}
-async function loadInventory(){
-  $("invInfo").textContent="Загружаю актуальные остатки…";
+let inventoryLoadVersion=0;
+let inventoryRetryTimer=null;
+async function loadInventory(attempt=0){
+  const version=++inventoryLoadVersion;
+  clearTimeout(inventoryRetryTimer);
+  const retry=()=>{if(attempt<24)inventoryRetryTimer=setTimeout(()=>loadInventory(attempt+1),5000);};
+  $("invInfo").textContent="Загружаю актуальные остатки из Provecta… Это может занять несколько минут после запуска сервера.";
   $("groupList").innerHTML="";
   $("inventoryHome").classList.remove("hidden");
   $("inventoryGroupView").classList.add("hidden");
   try{
-    const d=await api("/stock/api/search?q=",{timeoutMs:12000,retries:0});
-    S.inventory=d.products||[];
+    const d=await api("/stock/api/search?q=",{timeoutMs:45000,retries:0});
+    if(version!==inventoryLoadVersion)return;
     if(d.cache && !d.cache.ready){
+      S.inventory=[];
       const loaded=Number(d.cache.readyDepots||0);
-      const count=Array.isArray(d.cache.errors)?d.cache.errors.length:0;
-      $("invInfo").innerHTML='<div class="notice bad">Остатки пока недоступны: загружено складов '+loaded+' из 5.'+(count?' Есть ошибки подключения к Provecta.':'')+' Нулевые остатки не подставляются.</div><button id="invRetry" class="ghost" style="width:100%;margin-top:8px">Повторить загрузку</button>';
-      $("invRetry").addEventListener("click",loadInventory);
+      const pending=attempt<24;
+      $("invInfo").innerHTML='<div class="notice">Загрузка остатков: готово складов '+loaded+' из 5. '+(pending?'Повторяю проверку автоматически…':'Загрузка затянулась. Попробуйте ещё раз.')+'</div><button id="invRetry" class="ghost" style="width:100%;margin-top:8px">Повторить загрузку</button>';
+      $("invRetry").addEventListener("click",()=>loadInventory());
+      retry();
       return;
     }
+    S.inventory=d.products||[];
     renderGroupList();
   }catch(e){
-    $("invInfo").innerHTML='<div class="notice bad">'+esc(e.message)+'</div><button id="invRetry" class="ghost" style="width:100%;margin-top:8px">Повторить загрузку</button>';
-    $("invRetry").addEventListener("click",loadInventory);
+    if(version!==inventoryLoadVersion)return;
+    const pending=attempt<3 && !/PIN|401|403/.test(e.message);
+    $("invInfo").innerHTML='<div class="notice bad">'+esc(e.message)+(pending?' Повторяю подключение автоматически…':'')+'</div><button id="invRetry" class="ghost" style="width:100%;margin-top:8px">Повторить загрузку</button>';
+    $("invRetry").addEventListener("click",()=>loadInventory());
+    if(pending)retry();
   }
 }
 function availableGroups(){

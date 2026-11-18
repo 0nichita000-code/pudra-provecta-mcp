@@ -7,7 +7,7 @@ import { fileURLToPath } from "node:url";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 export function createStockApp(deps) {
-  const { getArticles, getDepots, getCachedStocks, refreshStockCache, getStockCacheState, simpleDepot, simpleArticle, articleBarcodes, idOf, asArray, apiGet, salesRows, modernSearchAdditionalBarcode, legacySearchAdditionalBarcode, findIndexedAlternate, startAlternateIndexing, getAlternateIndexStatus } = deps;
+  const { getArticles, getDepots, getCachedStocks, refreshStockCache, getStockCacheState, simpleDepot, simpleArticle, articleBarcodes, idOf, asArray, apiGet, salesRows, modernSearchAdditionalBarcode, legacySearchAdditionalBarcode, findIndexedAlternate, startAlternateIndexing, getAlternateIndexStatus, getBulkBarcodeStatus, startBulkBarcodeSync } = deps;
   const ADMIN_PIN = process.env.STOCK_ADMIN_PIN || "2468";
   const STAFF_PIN = process.env.STOCK_STAFF_PIN || "1357";
   const transfers = [];
@@ -136,9 +136,9 @@ export function createStockApp(deps) {
     if(exact && matched.length===0) {
       const indexed=findIndexedAlternate(s);
       if(indexed) matched=[indexed];
-      else startAlternateIndexing();
+      else {startBulkBarcodeSync?.();startAlternateIndexing();}
     }
-    if(exact && matched.length===0){
+    if(exact && matched.length===0 && !getBulkBarcodeStatus?.().complete){
       try{
         const modern=await withTimeout(legacySearchAdditionalBarcode(s),20000);
         if(modern?.article && (!modern.hidden || includeHidden)){ matched=[modern.article]; hiddenMatch=!!modern.hidden; }
@@ -152,7 +152,8 @@ export function createStockApp(deps) {
     }
 
     const products=matched.map(x=>({...shape(x,ds),hidden:hiddenMatch}));
-    return deps.enrichPhotos ? await deps.enrichPhotos(products,fastPhotos?{timeoutMs:250}:undefined) : products;
+    // Availability and prices must never wait for the photo service.
+    return products;
   }
   async function findProduct(productId,barcode){
     const {rawArticles,ds}=await catalogs();
@@ -169,7 +170,7 @@ export function createStockApp(deps) {
     }
     if(!a)return null;
     const product=shape(a,ds);
-    return deps.enrichPhotos ? (await deps.enrichPhotos([product]))[0] : product;
+    return product;
   }
   function transferError(p,ds,fromId,toId,qty){
     if(!fromId||!toId||fromId===toId)return "Выберите разные точки ОТКУДА и КУДА.";

@@ -16,11 +16,20 @@ test('failed scan clears pending message and offers retry for same barcode',asyn
 });
 test('stopped scan ignores late lookup result',async()=>{let release;const gate=new Promise(r=>release=r);const {c,get}=fixture(async()=>{await gate;return {products:[]}});const job=c.handleScannedCode('8809982982777');c.S.scanLocked=false;c.S.lastScanned='';get('scanResult').innerHTML='unchanged';release();await job;assert.equal(get('scanResult').innerHTML,'unchanged');});
 import {createStockApp} from './stock_app.js';
-test('scanner route applies short gallery budget and retains authentication',async()=>{
+test('stock search never calls gallery and retains authentication',async()=>{
  const old=process.env.STOCK_ADMIN_PIN;process.env.STOCK_ADMIN_PIN='scan-test-only';let budget;
  try{
  const handler=createStockApp({getArticles:async()=>[{Id:'p',Name:'Test',Barcode:'8809982982777'}],getDepots:async()=>[{id:'d',name:'DEPOZIT RISCANI'}],simpleDepot:x=>x,simpleArticle:a=>({id:a.Id,name:a.Name,barcode:a.Barcode}),idOf:a=>a.Id,articleBarcodes:()=>[],getCachedStocks:()=>[],getStockCacheState:()=>({ready:true}),enrichPhotos:async(p,opt)=>{budget=opt?.timeoutMs;return p;}});
  async function call(scan,pin){let status,body;await handler({method:'GET',headers:{'x-pudra-pin':pin,'x-pudra-role':'admin'}},{writeHead(s){status=s},end(b){body=JSON.parse(b)}},new URL('https://test/stock/api/search?q=8809982982777'+(scan?'&scan=1':'')));return {status,body};}
- assert.equal((await call(true,'wrong')).status,401);const fast=await call(true,'scan-test-only');assert.equal(fast.status,200);assert.equal(fast.body.products[0].id,'p');assert.equal(budget,250);await call(false,'scan-test-only');assert.equal(budget,undefined);
+ assert.equal((await call(true,'wrong')).status,401);const fast=await call(true,'scan-test-only');assert.equal(fast.status,200);assert.equal(fast.body.products[0].id,'p');assert.equal(budget,undefined);await call(false,'scan-test-only');assert.equal(budget,undefined);
+ }finally{if(old===undefined)delete process.env.STOCK_ADMIN_PIN;else process.env.STOCK_ADMIN_PIN=old;}
+});
+
+test('complete additional barcode index resolves known code and avoids legacy probes for unknown code',async()=>{
+ const old=process.env.STOCK_ADMIN_PIN;process.env.STOCK_ADMIN_PIN='index-test-only';let probes=0,photoCalls=0;
+ try{const article={Id:'p',Name:'Indexed',Barcode:'0000000000001'};
+ const handler=createStockApp({getArticles:async()=>[article],getDepots:async()=>[{id:'d',name:'DEPOZIT RISCANI'}],simpleDepot:x=>x,simpleArticle:a=>({id:a.Id,name:a.Name,price:120,barcode:a.Barcode}),idOf:a=>a.Id,articleBarcodes:()=>[],getCachedStocks:()=>[{id:'d',quantity:3}],getStockCacheState:()=>({ready:true}),findIndexedAlternate:b=>b==='8809982982777'?article:null,startAlternateIndexing(){},startBulkBarcodeSync(){},getBulkBarcodeStatus:()=>({complete:true}),legacySearchAdditionalBarcode:async()=>{probes++;},modernSearchAdditionalBarcode:async()=>{probes++;},enrichPhotos:async()=>{photoCalls++;throw Error('Must not load photo');}});
+ async function call(q){let status,body;await handler({method:'GET',headers:{'x-pudra-pin':'index-test-only','x-pudra-role':'admin'}},{writeHead(s){status=s},end(b){body=JSON.parse(b)}},new URL('https://test/stock/api/search?q='+q));assert.equal(status,200);return body;}
+ const found=await call('8809982982777');assert.equal(found.products[0].price,120);assert.equal(found.products[0].stocks[0].quantity,3);assert.equal((await call('9999999999999')).products.length,0);assert.equal(probes,0);assert.equal(photoCalls,0);
  }finally{if(old===undefined)delete process.env.STOCK_ADMIN_PIN;else process.env.STOCK_ADMIN_PIN=old;}
 });

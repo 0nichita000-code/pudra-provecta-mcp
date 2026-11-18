@@ -405,9 +405,8 @@ function scanStockRows(p){
   return p.stocks.map(x=>{const q=x.quantity==null?"обновляется…":x.quantity;return '<div class="stock"><span>'+esc(x.depotName)+'</span><span class="qty '+(x.quantity!=null&&Number(x.quantity)<=0?"zero":"")+'">'+esc(q)+'</span></div>';}).join("");
 }
 function photoHtml(p){
-  const src=String(p?.photo||p?.photoUrl||p?.image||p?.imageUrl||"").trim();
-  if(src)return '<div class="productPhoto"><img loading="lazy" decoding="async" src="'+esc(src)+'" alt="'+esc(p.name||'Фото товара')+'" onerror="this.parentNode.innerHTML=\'Нет фото\'"></div>';
-  return '<div class="productPhoto">Нет фото</div>';
+  // STOCK prioritizes price and availability; photos remain in the online shop.
+  return "";
 }
 function compactScanner(on=true){
   const wrap=$("scanVideoWrap");

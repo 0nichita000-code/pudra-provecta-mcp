@@ -736,6 +736,7 @@ function startBulkBarcodeSync(){
    if(complete)bulkArticleBarcodes.clear();for(const [id,codes]of next)bulkArticleBarcodes.set(id,[...new Set([...(complete?[]:bulkArticleBarcodes.get(id)||[]),...codes])]);
    if(complete)bulkBarcodeOwners.clear();for(const {id,code}of all)if(!bulkBarcodeOwners.has(code))bulkBarcodeOwners.set(code,id);
    bulkBarcodeState={running:true,complete,lastSuccessAt:new Date().toISOString(),count:all.length,total,lastError:complete?null:'The upstream response does not confirm that every page was returned'};
+   console.info('STOCK_BULK_BARCODES '+JSON.stringify({complete,count:all.length,total}));
   }catch(e){bulkBarcodeState.lastError=String(e.message||e).slice(0,200);bulkBarcodeState.complete=false}
  })().finally(()=>{bulkBarcodeState.running=false});
 }
@@ -1463,7 +1464,7 @@ const stockApp = createStockApp({
   stockShopPhotoStatus,
   getArticles, getDepots, getCachedStocks, refreshStockCache, getStockCacheState,
   simpleDepot, simpleArticle, articleBarcodes, idOf, asArray, apiGet, salesRows,
-  modernSearchAdditionalBarcode, legacySearchAdditionalBarcode, findIndexedAlternate, startAlternateIndexing, getAlternateIndexStatus
+  modernSearchAdditionalBarcode, legacySearchAdditionalBarcode, findIndexedAlternate, startAlternateIndexing, getAlternateIndexStatus, getBulkBarcodeStatus, startBulkBarcodeSync
 });
 
 const controlExtras=createControlExtras({webRead:provectaWebRead,salesRows,docDepotId,docId});
@@ -1659,7 +1660,8 @@ async function probeNarrowStockQuery() {
 httpServer.listen(PORT, "0.0.0.0", () => {
   console.log(`PUDRA Provecta MCP listening on :${PORT}${MCP_PATH}`);
   Promise.all([getArticles(false), getDepots(false)])
-    .then(() => {void probeNarrowStockQuery();return refreshStockCache(true);})
+    .then(() => {startBulkBarcodeSync();void probeNarrowStockQuery();return refreshStockCache(true);})
     .catch(e => console.error("Warm-up failed", e?.message || e));
+  setInterval(startBulkBarcodeSync, 10 * 60 * 1000).unref();
   setInterval(() => refreshStockCache(false).catch(() => {}), 2 * 60 * 1000).unref();
 });

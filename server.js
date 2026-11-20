@@ -1,5 +1,5 @@
 import {createGalleryPhotos} from './gallery_photos.js';
-import {stockShopPhoto,stockShopPhotoStatus} from './stock_shop_photos.js';
+import {stockShopPhoto,stockShopPhotoStatus,stockShopGallery} from './stock_shop_photos.js';
 import {handleStockSafely} from './stock_transport.js';
 import {createShopCatalog} from './shop_catalog.js';
 import {createControlExtras} from './control_extras.js';
@@ -954,7 +954,7 @@ function articlePhoto(a) {
   }
   return "";
 }
-function simpleArticle(a) { return { id: idOf(a), barcode: a.Barcode ?? a.barcode ?? "", additionalBarcodes: articleBarcodes(a), code: a.Code ?? a.code ?? "", name: a.Name ?? a.name ?? "", price: a.Price ?? a.price ?? null, reserve: a.Reserve ?? a.reserve ?? null, photo: articlePhoto(a) }; }
+function simpleArticle(a) { return { id: idOf(a), barcode: a.Barcode ?? a.barcode ?? "", additionalBarcodes: articleBarcodes(a), code: a.Code ?? a.code ?? "", name: a.Name ?? a.name ?? "", price: a.Price ?? a.price ?? null, reserve: a.Reserve ?? a.reserve ?? null, photo: articlePhoto(a), additionalPhotos:stockShopGallery(idOf(a)) }; }
 
 function docOperation(d) { return d.DocumentOperationType ?? d.documentOperationType ?? ""; }
 function docId(d) { return idOf(d.Id ?? d.id ?? d); }
